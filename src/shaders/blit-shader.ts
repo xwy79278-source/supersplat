@@ -6,10 +6,11 @@ const vertexShader = /* glsl*/ `
 `;
 
 const fragmentShader = /* glsl*/ `
-    uniform sampler2D srcTexture;
+    uniform sampler2D blitTexture;
     void main(void) {
         ivec2 texel = ivec2(gl_FragCoord.xy);
-        gl_FragColor = texelFetch(srcTexture, texel, 0);
+
+        gl_FragColor = texelFetch(blitTexture, texel, 0);
     }
 `;
 

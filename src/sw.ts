@@ -3,7 +3,7 @@ import { version as appVersion } from '../package.json';
 // export default null
 declare let self: ServiceWorkerGlobalScope;
 
-const cacheName = `superSplat-v${appVersion}`;
+const cacheName = `PointCosm-v${appVersion}`;
 
 const cacheUrls = [
     './',
@@ -11,6 +11,7 @@ const cacheUrls = [
     './index.html',
     './index.js',
     './index.js.map',
+    './jszip.js',
     './manifest.json',
     './static/icons/logo-192.png',
     './static/icons/logo-512.png',
@@ -18,8 +19,6 @@ const cacheUrls = [
     './static/images/screenshot-wide.jpg',
     './static/lib/lodepng/lodepng.js',
     './static/lib/lodepng/lodepng.wasm',
-    './static/lib/webp/webp.mjs',
-    './static/lib/webp/webp.wasm',
     './static/locales/de.json',
     './static/locales/en.json',
     './static/locales/fr.json',

@@ -39,7 +39,7 @@ class Element {
         }
     }
 
-    add(): void | Promise<void> {}
+    add() {}
 
     remove() {}
 

@@ -2,59 +2,93 @@ import {
     BLENDEQUATION_ADD,
     BLENDMODE_ONE,
     BLENDMODE_ZERO,
+    SEMANTIC_POSITION,
     BlendState,
-    Layer
+    Color,
+    Entity,
+    Layer,
+    Shader,
+    ShaderUtils,
+    QuadRender,
+    WebglGraphicsDevice
 } from 'playcanvas';
 
 import { Element, ElementType } from './element';
 import { vertexShader, fragmentShader } from './shaders/blit-shader';
-import { ShaderQuad, SimpleRenderPass } from './utils/simple-render-pass';
 
 class Underlay extends Element {
-    shaderQuad: ShaderQuad;
-    renderPass: SimpleRenderPass;
+    entity: Entity;
+    shader: Shader;
+    quadRender: QuadRender;
     enabled = true;
 
     constructor() {
         super(ElementType.other);
+
+        this.entity = new Entity('underlayCamera');
+        this.entity.addComponent('camera');
+        this.entity.camera.setShaderPass('UNDERLAY');
+        this.entity.camera.clearColor = new Color(0, 0, 0, 0);
     }
 
     add() {
         const device = this.scene.app.graphicsDevice;
 
-        this.shaderQuad = new ShaderQuad(device, vertexShader, fragmentShader, 'apply-underlay');
-        this.renderPass = new SimpleRenderPass(device, this.shaderQuad, {
-            blendState: new BlendState(true,
-                BLENDEQUATION_ADD, BLENDMODE_ONE, BLENDMODE_ONE,
-                BLENDEQUATION_ADD, BLENDMODE_ZERO, BLENDMODE_ONE
-            )
+        this.entity.camera.layers = [this.scene.overlayLayer.id];
+        this.scene.camera.entity.addChild(this.entity);
+
+        this.shader = ShaderUtils.createShader(device, {
+            uniqueName: 'apply-underlay',
+            attributes: {
+                vertex_position: SEMANTIC_POSITION
+            },
+            vertexGLSL: vertexShader,
+            fragmentGLSL: fragmentShader
         });
 
-        const { camera, events } = this.scene;
+        this.quadRender = new QuadRender(this.shader);
 
-        camera.camera.on('preRenderLayer', (layer: Layer, transparent: boolean) => {
-            // underlay is used when outline mode is disabled
-            if (!this.enabled || events.invoke('view.outlineSelection')) {
+        const blitTextureId = device.scope.resolve('blitTexture');
+        const blendState = new BlendState(true,
+            BLENDEQUATION_ADD, BLENDMODE_ONE, BLENDMODE_ONE,
+            BLENDEQUATION_ADD, BLENDMODE_ZERO, BLENDMODE_ONE
+        );
+
+        this.entity.camera.on('postRenderLayer', (layer: Layer, transparent: boolean) => {
+            if (!this.entity.enabled || layer !== this.scene.overlayLayer || !transparent) {
                 return;
             }
 
-            // apply at the start of the gizmo layer
-            if (layer !== this.scene.gizmoLayer || transparent) {
-                return;
-            }
+            device.setBlendState(blendState);
 
-            this.renderPass.execute({
-                srcTexture: camera.workTarget.colorBuffer
-            });
+            blitTextureId.setValue(this.entity.camera.renderTarget.colorBuffer);
+
+            const glDevice = device as WebglGraphicsDevice;
+            glDevice.setRenderTarget(this.scene.camera.entity.camera.renderTarget);
+            glDevice.updateBegin();
+            this.quadRender.render();
+            glDevice.updateEnd();
         });
     }
 
     remove() {
-        // event listeners are cleaned up when camera is destroyed
+        this.scene.camera.entity.removeChild(this.entity);
     }
 
     onPreRender() {
-        // no longer need to manage a separate camera
+        // copy camera properties
+        const src = this.scene.camera.entity.camera;
+        const dst = this.entity.camera;
+
+        dst.projection = src.projection;
+        dst.horizontalFov = src.horizontalFov;
+        dst.fov = src.fov;
+        dst.nearClip = src.nearClip;
+        dst.farClip = src.farClip;
+        dst.orthoHeight = src.orthoHeight;
+
+        this.entity.enabled = this.enabled && !this.scene.events.invoke('view.outlineSelection');
+        this.entity.camera.renderTarget = this.scene.camera.workRenderTarget;
     }
 }
 

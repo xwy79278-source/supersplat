@@ -42,16 +42,14 @@
 
         border-radius: 4px;
 
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        text-align: center;
 
         svg {
             color: $clr-hilight;
         }
     
         &:hover {
-            color: #ff9900;
+            color: #9900ff;
             background-color: $bcg-darkest;
             cursor: pointer;
         }

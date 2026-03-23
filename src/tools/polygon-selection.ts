@@ -33,10 +33,10 @@ class PolygonSelection {
 
         const paint = () => {
             polyline.setAttribute('points', [...points, currentPoint].filter(v => v).reduce((prev, current) => `${prev}${current.x}, ${current.y} `, ''));
-            polyline.setAttribute('stroke', isClosed() ? '#fa6' : '#f60');
+            polyline.setAttribute('stroke', isClosed() ? '#fa6' : '#6241bf');
         };
 
-        const commitSelection = async (e: PointerEvent) => {
+        const commitSelection = (e: PointerEvent) => {
             // initialize canvas
             if (canvas.width !== parent.clientWidth || canvas.height !== parent.clientHeight) {
                 canvas.width = parent.clientWidth;
@@ -47,7 +47,7 @@ class PolygonSelection {
             context.clearRect(0, 0, canvas.width, canvas.height);
 
             context.beginPath();
-            context.fillStyle = '#f60';
+            context.fillStyle = '#6241bf';
             context.beginPath();
             points.forEach((p, idx) => {
                 if (idx === 0) {
@@ -59,15 +59,13 @@ class PolygonSelection {
             context.closePath();
             context.fill();
 
-            // wait for selection to complete
-            await events.invoke(
+            events.fire(
                 'select.byMask',
                 e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'),
                 canvas,
                 context
             );
 
-            // clear polygon after selection completes
             points = [];
             paint();
         };
@@ -87,25 +85,25 @@ class PolygonSelection {
             }
         };
 
-        const pointerup = async (e: PointerEvent) => {
+        const pointerup = (e: PointerEvent) => {
             if (e.pointerType === 'mouse' ? e.button === 0 : e.isPrimary) {
                 e.preventDefault();
                 e.stopPropagation();
 
                 if (isClosed()) {
-                    await commitSelection(e);
+                    commitSelection(e);
                 } else if (points.length === 0 || dist(points[points.length - 1], currentPoint) > 0) {
                     points.push(currentPoint);
                 }
             }
         };
 
-        const dblclick = async (e: PointerEvent) => {
+        const dblclick = (e: PointerEvent) => {
             e.preventDefault();
             e.stopPropagation();
 
             if (points.length > 2) {
-                await commitSelection(e);
+                commitSelection(e);
             }
         };
 

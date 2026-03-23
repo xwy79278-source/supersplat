@@ -68,14 +68,17 @@
                     width: 100%;
                 }
 
+              
+                // .select:hover {
+                //     border-color: rgba(188, 122, 253, 0.8) !important;
+                //     box-shadow: 0 0 4px 2px rgba(188, 122, 253, 0.5) !important;
+                // }
+
+            
+
                 .text-input {
                     margin: 0px;
                     width: 100%;
-                }
-
-                .boolean {
-                    margin: 5px 0 0 auto;
-                    flex-grow: 0;
                 }
             }
         }

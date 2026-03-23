@@ -3,7 +3,6 @@ import { Mat4, path, Vec3 } from 'playcanvas';
 
 import { DataPanel } from './data-panel';
 import { Events } from '../events';
-import { AboutPopup } from './about-popup';
 import { BottomToolbar } from './bottom-toolbar';
 import { ColorPanel } from './color-panel';
 import { ExportPopup } from './export-popup';
@@ -11,7 +10,7 @@ import { ImageSettingsDialog } from './image-settings-dialog';
 import { localize, localizeInit } from './localization';
 import { Menu } from './menu';
 import { ModeToggle } from './mode-toggle';
-import logo from './playcanvas-logo.png';
+import logo from './company-logo.png';
 import { Popup, ShowOptions } from './popup';
 import { Progress } from './progress';
 import { PublishSettingsDialog } from './publish-settings-dialog';
@@ -19,7 +18,6 @@ import { RightToolbar } from './right-toolbar';
 import { ScenePanel } from './scene-panel';
 import { ShortcutsPopup } from './shortcuts-popup';
 import { Spinner } from './spinner';
-import { StatusBar } from './status-bar';
 import { TimelinePanel } from './timeline-panel';
 import { Tooltips } from './tooltips';
 import { VideoSettingsDialog } from './video-settings-dialog';
@@ -76,7 +74,7 @@ class EditorUI {
         // app label
         const appLabel = new Label({
             id: 'app-label',
-            text: `SUPERSPLAT v${version}`
+            text: `POINTCOSM v${version}`
         });
 
         // cursor label
@@ -129,7 +127,7 @@ class EditorUI {
         const menu = new Menu(events);
 
         canvasContainer.dom.appendChild(canvas);
-        canvasContainer.append(appLabel);
+        // canvasContainer.append(appLabel);
         canvasContainer.append(cursorLabel);
         canvasContainer.append(toolsContainer);
         canvasContainer.append(scenePanel);
@@ -154,20 +152,10 @@ class EditorUI {
 
         const timelinePanel = new TimelinePanel(events, tooltips);
         const dataPanel = new DataPanel(events);
-        const statusBar = new StatusBar(events, tooltips);
-
-        timelinePanel.hidden = true;
 
         mainContainer.append(canvasContainer);
         mainContainer.append(timelinePanel);
         mainContainer.append(dataPanel);
-        mainContainer.append(statusBar);
-
-        // Wire up status bar panel toggles
-        events.on('statusBar.panelChanged', (panel: string | null) => {
-            timelinePanel.hidden = panel !== 'timeline';
-            dataPanel.hidden = panel !== 'splatData';
-        });
 
         editorContainer.append(mainContainer);
 
@@ -177,7 +165,7 @@ class EditorUI {
         const popup = new Popup(tooltips);
 
         // shortcuts popup
-        const shortcutsPopup = new ShortcutsPopup(events);
+        const shortcutsPopup = new ShortcutsPopup();
 
         // export popup
         const exportPopup = new ExportPopup(events);
@@ -191,20 +179,16 @@ class EditorUI {
         // video settings
         const videoSettingsDialog = new VideoSettingsDialog(events);
 
-        // about popup
-        const aboutPopup = new AboutPopup();
-
         topContainer.append(popup);
         topContainer.append(exportPopup);
         topContainer.append(publishSettingsDialog);
         topContainer.append(imageSettingsDialog);
         topContainer.append(videoSettingsDialog);
-        topContainer.append(shortcutsPopup);
-        topContainer.append(aboutPopup);
 
         appContainer.append(editorContainer);
         appContainer.append(topContainer);
         appContainer.append(tooltipsContainer);
+        appContainer.append(shortcutsPopup);
 
         this.appContainer = appContainer;
         this.topContainer = topContainer;
@@ -225,15 +209,22 @@ class EditorUI {
         });
 
         events.function('show.publishSettingsDialog', async () => {
-            // show popup if user isn't logged in
-            const userStatus = await events.invoke('publish.userStatus');
+            // 跳过登录验证，使用模拟用户数据
+            let userStatus = await events.invoke('publish.userStatus');
+            console.log('userStatus', userStatus);
+            
+            // 如果未登录，创建虚拟用户对象以绕过验证
             if (!userStatus) {
-                await events.invoke('showPopup', {
-                    type: 'error',
-                    header: localize('popup.error'),
-                    message: localize('popup.publish.please-log-in')
-                });
-                return false;
+                console.warn('[Dev Mode] 跳过登录验证，使用模拟用户数据');
+                userStatus = {
+                    user: {
+                        id: 'dev-user-001',
+                        username: '开发测试用户',
+                        token: 'mock-token-for-development',
+                        apiServer: 'https://your-api-server.com'  // 替换为实际API地址
+                    },
+                    scenes: []  // 空场景列表，表示新建场景
+                };
             }
 
             // get user publish settings
@@ -303,11 +294,10 @@ class EditorUI {
                     const suggested = `${removeExtension(docName ?? 'supersplat')}${fileExtension}`;
 
                     let writable;
-                    let fileHandle: FileSystemFileHandle | undefined;
 
                     if (window.showSaveFilePicker) {
-                        fileHandle = await window.showSaveFilePicker({
-                            id: 'SuperSplatVideoFileExport',
+                        const fileHandle = await window.showSaveFilePicker({
+                            id: 'PointCosmVideoFileExport',
                             types: filePickerTypes,
                             suggestedName: suggested
                         });
@@ -315,12 +305,7 @@ class EditorUI {
                         writable = await fileHandle.createWritable();
                     }
 
-                    const result = await events.invoke('render.video', videoSettings, writable);
-
-                    // if the render was cancelled, remove the empty file left on disk
-                    if (result === false && fileHandle?.remove) {
-                        await fileHandle.remove();
-                    }
+                    await events.invoke('render.video', videoSettings, writable);
                 } catch (error) {
                     if (error instanceof DOMException && error.name === 'AbortError') {
                         // user cancelled save dialog
@@ -336,32 +321,30 @@ class EditorUI {
             }
         });
 
-        events.on('show.about', () => {
-            aboutPopup.hidden = false;
+        events.function('show.about', () => {
+            return this.popup.show({
+                type: 'info',
+                header: 'About',
+                message: `POINTCOSM v${version}`
+            });
         });
 
         events.function('showPopup', (options: ShowOptions) => {
             return this.popup.show(options);
         });
 
-        // spinner with reference counting to handle nested operations
+        // spinner
+
         const spinner = new Spinner();
+
         topContainer.append(spinner);
 
-        let spinnerCount = 0;
-
         events.on('startSpinner', () => {
-            spinnerCount++;
-            if (spinnerCount === 1) {
-                spinner.hidden = false;
-            }
+            spinner.hidden = false;
         });
 
         events.on('stopSpinner', () => {
-            spinnerCount = Math.max(0, spinnerCount - 1);
-            if (spinnerCount === 0) {
-                spinner.hidden = true;
-            }
+            spinner.hidden = true;
         });
 
         // progress
@@ -370,28 +353,18 @@ class EditorUI {
 
         topContainer.append(progress);
 
-        events.on('progressStart', (header: string, cancellable?: boolean) => {
+        events.on('progressStart', (header: string) => {
             progress.hidden = false;
             progress.setHeader(header);
-            progress.setText('');
-            progress.setProgress(0);
-            progress.showCancelButton(!!cancellable);
-            progress.onCancel = cancellable ? () => events.fire('progressCancel') : null;
         });
 
-        events.on('progressUpdate', (options: { text?: string, progress?: number }) => {
-            if (options.text !== undefined) {
-                progress.setText(options.text);
-            }
-            if (options.progress !== undefined) {
-                progress.setProgress(options.progress);
-            }
+        events.on('progressUpdate', (options: { text: string, progress: number }) => {
+            progress.setText(options.text);
+            progress.setProgress(options.progress);
         });
 
         events.on('progressEnd', () => {
             progress.hidden = true;
-            progress.showCancelButton(false);
-            progress.onCancel = null;
         });
 
         // initialize canvas to correct size before creating graphics device etc

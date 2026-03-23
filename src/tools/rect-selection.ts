@@ -69,7 +69,7 @@ class RectSelection {
             svg.classList.add('hidden');
         };
 
-        const pointerup = async (e: PointerEvent) => {
+        const pointerup = (e: PointerEvent) => {
             if (e.pointerId === dragId) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -77,24 +77,24 @@ class RectSelection {
                 const w = parent.clientWidth;
                 const h = parent.clientHeight;
 
+                dragEnd();
+
                 if (dragMoved) {
-                    // rect select - wait for selection to complete before hiding rect
-                    await events.invoke(
+                    // rect select
+                    events.fire(
                         'select.rect',
                         e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'), {
                             start: { x: Math.min(start.x, end.x) / w, y: Math.min(start.y, end.y) / h },
                             end: { x: Math.max(start.x, end.x) / w, y: Math.max(start.y, end.y) / h }
                         });
                 } else {
-                    // pick - wait for selection to complete before hiding rect
-                    await events.invoke(
+                    // pick
+                    events.fire(
                         'select.point',
                         e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'),
                         { x: e.offsetX / parent.clientWidth, y: e.offsetY / parent.clientHeight }
                     );
                 }
-
-                dragEnd();
             }
         };
 

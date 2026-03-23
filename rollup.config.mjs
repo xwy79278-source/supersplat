@@ -31,7 +31,7 @@ const outputHeader = () => {
     const RESET_OUT = '\x1b[0m';
 
     const title = [
-        'Building SuperSplat',
+        'Building PointCosm',
         `type ${BOLD_OUT}${BUILD_TYPE}${REGULAR_OUT}`
     ].map(l => `${BLUE_OUT}${l}`).join('\n');
     console.log(`${BLUE_OUT}${title}${RESET_OUT}\n`);
@@ -56,6 +56,7 @@ const application = {
                     }
                 },
                 { src: 'src/manifest.json' },
+                { src: 'node_modules/jszip/dist/jszip.js' },
                 { src: 'static/images', dest: 'static' },
                 { src: 'static/icons', dest: 'static' },
                 { src: 'static/lib', dest: 'static' },

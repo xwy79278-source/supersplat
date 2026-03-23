@@ -2,7 +2,6 @@ import { BooleanInput, ColorPicker, Container, Label, SelectInput, SliderInput }
 import { Color } from 'playcanvas';
 
 import { Events } from '../events';
-import { ShortcutManager } from '../shortcut-manager';
 import { localize } from './localization';
 import { Tooltips } from './tooltips';
 
@@ -121,8 +120,9 @@ class ViewPanel extends Container {
 
         const tonemappingSelection = new SelectInput({
             class: 'view-panel-row-select',
-            defaultValue: 'linear',
+            defaultValue: 'none',
             options: [
+                { v: 'none', t: localize('panel.view-options.tonemapping.none') },
                 { v: 'linear', t: localize('panel.view-options.tonemapping.linear') },
                 { v: 'neutral', t: localize('panel.view-options.tonemapping.neutral') },
                 { v: 'aces', t: localize('panel.view-options.tonemapping.aces') },
@@ -178,28 +178,6 @@ class ViewPanel extends Container {
         shBandsRow.append(shBandsLabel);
         shBandsRow.append(shBandsSlider);
 
-        // camera fly speed
-
-        const cameraFlySpeedRow = new Container({
-            class: 'view-panel-row'
-        });
-
-        const cameraFlySpeedLabel = new Label({
-            text: localize('panel.view-options.fly-speed'),
-            class: 'view-panel-row-label'
-        });
-
-        const cameraFlySpeedSlider = new SliderInput({
-            class: 'view-panel-row-slider',
-            min: 0.1,
-            max: 30,
-            precision: 1,
-            value: 1
-        });
-
-        cameraFlySpeedRow.append(cameraFlySpeedLabel);
-        cameraFlySpeedRow.append(cameraFlySpeedSlider);
-
         // centers size
 
         const centersSizeRow = new Container({
@@ -222,24 +200,47 @@ class ViewPanel extends Container {
         centersSizeRow.append(centersSizeLabel);
         centersSizeRow.append(centersSizeSlider);
 
-        // centers gaussian color
-        const centersColorRow = new Container({
+        // camera fly speed
+
+        const cameraFlySpeedRow = new Container({
             class: 'view-panel-row'
         });
 
-        const centersColorLabel = new Label({
-            text: localize('panel.view-options.centers-gaussian-color'),
+        const cameraFlySpeedLabel = new Label({
+            text: localize('panel.view-options.fly-speed'),
             class: 'view-panel-row-label'
         });
 
-        const centersColorToggle = new BooleanInput({
-            type: 'toggle',
-            class: 'view-panel-row-toggle',
-            value: false
+        const cameraFlySpeedSlider = new SliderInput({
+            class: 'view-panel-row-slider',
+            min: 0.1,
+            max: 30,
+            precision: 1,
+            value: 5
         });
 
-        centersColorRow.append(centersColorLabel);
-        centersColorRow.append(centersColorToggle);
+        cameraFlySpeedRow.append(cameraFlySpeedLabel);
+        cameraFlySpeedRow.append(cameraFlySpeedSlider);
+
+        // high precision (render to float)
+
+        const highPrecisionRow = new Container({
+            class: 'view-panel-row'
+        });
+
+        const highPrecisionLabel = new Label({
+            text: localize('panel.view-options.high-precision'),
+            class: 'view-panel-row-label'
+        });
+
+        const highPrecisionToggle = new BooleanInput({
+            type: 'toggle',
+            class: 'view-panel-row-toggle',
+            value: true
+        });
+
+        highPrecisionRow.append(highPrecisionLabel);
+        highPrecisionRow.append(highPrecisionToggle);
 
         // outline selection
 
@@ -301,38 +302,17 @@ class ViewPanel extends Container {
         showBoundRow.append(showBoundLabel);
         showBoundRow.append(showBoundToggle);
 
-        // show camera poses
-
-        const showCameraPosesRow = new Container({
-            class: 'view-panel-row'
-        });
-
-        const showCameraPosesLabel = new Label({
-            text: localize('panel.view-options.show-camera-poses'),
-            class: 'view-panel-row-label'
-        });
-
-        const showCameraPosesToggle = new BooleanInput({
-            type: 'toggle',
-            class: 'view-panel-row-toggle',
-            value: false
-        });
-
-        showCameraPosesRow.append(showCameraPosesLabel);
-        showCameraPosesRow.append(showCameraPosesToggle);
-
         this.append(header);
         this.append(clrRow);
         this.append(tonemappingRow);
         this.append(fovRow);
         this.append(shBandsRow);
-        this.append(cameraFlySpeedRow);
         this.append(centersSizeRow);
-        this.append(centersColorRow);
+        this.append(cameraFlySpeedRow);
+        this.append(highPrecisionRow);
         this.append(outlineSelectionRow);
         this.append(showGridRow);
         this.append(showBoundRow);
-        this.append(showCameraPosesRow);
 
         // handle panel visibility
 
@@ -383,15 +363,6 @@ class ViewPanel extends Container {
             events.fire('camera.setMode', 'centers');
         });
 
-        // centers gaussian color
-        events.on('view.centersUseGaussianColor', (value: boolean) => {
-            centersColorToggle.value = value;
-        });
-
-        centersColorToggle.on('change', (value: boolean) => {
-            events.fire('view.setCentersUseGaussianColor', value);
-        });
-
         // camera speed
 
         events.on('camera.flySpeed', (value: number) => {
@@ -432,14 +403,14 @@ class ViewPanel extends Container {
             events.fire('camera.setBound', showBoundToggle.value);
         });
 
-        // show camera poses
+        // high precision (render to float)
 
-        events.on('camera.showPoses', (visible: boolean) => {
-            showCameraPosesToggle.value = visible;
+        events.on('camera.highPrecision', (enabled: boolean) => {
+            highPrecisionToggle.value = enabled;
         });
 
-        showCameraPosesToggle.on('change', () => {
-            events.fire('camera.setShowPoses', showCameraPosesToggle.value);
+        highPrecisionToggle.on('change', () => {
+            events.fire('camera.sethighPrecision', highPrecisionToggle.value);
         });
 
         // background color
@@ -481,9 +452,6 @@ class ViewPanel extends Container {
         });
 
         // tooltips
-        const shortcutManager: ShortcutManager = events.invoke('shortcutManager');
-        const shortcut = shortcutManager.formatShortcut('grid.toggleVisible');
-        tooltips.register(showGridLabel, `${localize('panel.view-options.show-grid')} ( ${shortcut} )`, 'left');
         tooltips.register(bgClrPicker, localize('panel.view-options.background-color'), 'left');
         tooltips.register(selectedClrPicker, localize('panel.view-options.selected-color'), 'top');
         tooltips.register(unselectedClrPicker, localize('panel.view-options.unselected-color'), 'top');

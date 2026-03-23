@@ -151,15 +151,15 @@ class SplatsTransformHandler implements TransformHandler {
             transformPalette.setTransform(newIdx, mat2);
         });
 
-        this.splat.updateLocalBounds();
+        this.splat.makeSelectionBoundDirty();
     }
 
-    async end() {
+    end() {
         const { splat, transform, paletteMap } = this;
 
         // TODO: consider moving this to update() function above so splats are sorted correctly
         // for render during drag (which is slower).
-        await splat.updatePositions();
+        splat.updatePositions();
         splat.selectionAlpha = 1;
         splat.scene.outline.enabled = true;
         splat.scene.underlay.enabled = true;

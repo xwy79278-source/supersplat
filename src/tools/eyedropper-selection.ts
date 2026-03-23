@@ -83,19 +83,13 @@ class EyedropperSelection {
             }
         };
 
-        const pointerup = async (event: PointerEvent) => {
+        const pointerup = (event: PointerEvent) => {
             if (event.pointerId === pointerId) {
                 event.preventDefault();
                 event.stopPropagation();
-
-                await events.invoke(
-                    'select.colorMatch',
-                    getPointerOp(event),
-                    toNormalizedPoint(event),
-                    threshold
-                );
-
                 resetPointer();
+
+                events.fire('select.colorMatch', getPointerOp(event), toNormalizedPoint(event), threshold);
             }
         };
 

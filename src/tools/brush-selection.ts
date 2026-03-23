@@ -33,7 +33,7 @@ class BrushSelection {
 
             if (dragId !== undefined) {
                 context.beginPath();
-                context.strokeStyle = '#f60';
+                context.strokeStyle = '#6241bf';
                 context.lineCap = 'round';
                 context.lineWidth = radius * 2;
                 context.moveTo(prev.x, prev.y);
@@ -87,14 +87,14 @@ class BrushSelection {
             canvas.style.display = 'none';
         };
 
-        const pointerup = async (e: PointerEvent) => {
+        const pointerup = (e: PointerEvent) => {
             if (e.pointerId === dragId) {
                 e.preventDefault();
                 e.stopPropagation();
 
                 dragEnd();
 
-                await events.invoke(
+                events.fire(
                     'select.byMask',
                     e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'),
                     canvas,

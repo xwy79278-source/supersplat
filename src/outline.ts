@@ -1,60 +1,119 @@
 import {
+    CULLFACE_NONE,
+    SEMANTIC_POSITION,
     BlendState,
-    Layer
+    DepthState,
+    Color,
+    Entity,
+    Layer,
+    Shader,
+    ShaderUtils,
+    QuadRender,
+    WebglGraphicsDevice
 } from 'playcanvas';
 
 import { Element, ElementType } from './element';
 import { vertexShader, fragmentShader } from './shaders/outline-shader';
-import { ShaderQuad, SimpleRenderPass } from './utils/simple-render-pass';
+import { Splat } from './splat';
 
 class Outline extends Element {
-    shaderQuad: ShaderQuad;
-    renderPass: SimpleRenderPass;
+    entity: Entity;
+    shader: Shader;
+    quadRender: QuadRender;
     enabled = true;
+    clr = new Color(1, 1, 1, 0.5);
 
     constructor() {
         super(ElementType.other);
+
+        this.entity = new Entity('outlineCamera');
+        this.entity.addComponent('camera');
+        this.entity.camera.setShaderPass('OUTLINE');
+        this.entity.camera.clearColor = new Color(0, 0, 0, 0);
     }
 
     add() {
         const device = this.scene.app.graphicsDevice;
+        const layerId = this.scene.overlayLayer.id;
 
-        this.shaderQuad = new ShaderQuad(device, vertexShader, fragmentShader, 'apply-outline');
-        this.renderPass = new SimpleRenderPass(device, this.shaderQuad, {
-            blendState: BlendState.ALPHABLEND
+        // add selected splat to outline layer
+        this.scene.events.on('selection.changed', (splat: Splat, prev: Splat) => {
+            if (prev) {
+                prev.entity.gsplat.layers = prev.entity.gsplat.layers.filter(id => id !== layerId);
+            }
+            if (splat) {
+                splat.entity.gsplat.layers = splat.entity.gsplat.layers.concat([layerId]);
+            }
         });
 
-        const clr = [1, 1, 1, 1];
+        // render overlay layer only
+        this.entity.camera.layers = [layerId];
+        this.scene.camera.entity.addChild(this.entity);
 
-        const { camera, events } = this.scene;
+        this.shader = ShaderUtils.createShader(device, {
+            uniqueName: 'apply-outline',
+            attributes: {
+                vertex_position: SEMANTIC_POSITION
+            },
+            vertexGLSL: vertexShader,
+            fragmentGLSL: fragmentShader
+        });
 
-        camera.camera.on('postRenderLayer', (layer: Layer, transparent: boolean) => {
-            // only apply when outline mode is enabled
-            if (!this.enabled || !events.invoke('view.outlineSelection')) {
+        this.quadRender = new QuadRender(this.shader);
+
+        const outlineTextureId = device.scope.resolve('outlineTexture');
+        const alphaCutoffId = device.scope.resolve('alphaCutoff');
+        const clrId = device.scope.resolve('clr');
+        const clrStorage = [1, 1, 1, 1];
+        const events = this.scene.events;
+
+        // apply the outline texture to the display before gizmos render
+        this.entity.camera.on('postRenderLayer', (layer: Layer, transparent: boolean) => {
+            if (!this.entity.enabled || layer !== this.scene.overlayLayer || !transparent) {
                 return;
             }
 
-            // apply at the end of the gizmo layer (after overlay renders)
-            if (layer !== this.scene.gizmoLayer || !transparent) {
-                return;
-            }
+            device.setBlendState(BlendState.ALPHABLEND);
+            device.setCullMode(CULLFACE_NONE);
+            device.setDepthState(DepthState.NODEPTH);
+            device.setStencilState(null, null);
 
-            events.invoke('selectedClr').toArray(clr);
+            const selectedClr = events.invoke('selectedClr');
+            clrStorage[0] = selectedClr.r;
+            clrStorage[1] = selectedClr.g;
+            clrStorage[2] = selectedClr.b;
+            clrStorage[3] = selectedClr.a;
 
-            this.renderPass.execute({
-                srcTexture: camera.workTarget.colorBuffer,
-                alphaCutoff: events.invoke('camera.mode') === 'rings' ? 0.0 : 0.8,
-                clr
-            });
+            outlineTextureId.setValue(this.entity.camera.renderTarget.colorBuffer);
+            alphaCutoffId.setValue(events.invoke('camera.mode') === 'rings' ? 0.0 : 0.4);
+            clrId.setValue(clrStorage);
+
+            const glDevice = device as WebglGraphicsDevice;
+            glDevice.setRenderTarget(this.scene.camera.entity.camera.renderTarget);
+            glDevice.updateBegin();
+            this.quadRender.render();
+            glDevice.updateEnd();
         });
     }
 
     remove() {
-        // event listeners are cleaned up when camera is destroyed
+        this.scene.camera.entity.removeChild(this.entity);
     }
 
     onPreRender() {
-        // no longer need to manage a separate camera
+        // copy camera properties
+        const src = this.scene.camera.entity.camera;
+        const dst = this.entity.camera;
+
+        dst.projection = src.projection;
+        dst.horizontalFov = src.horizontalFov;
+        dst.fov = src.fov;
+        dst.nearClip = src.nearClip;
+        dst.farClip = src.farClip;
+        dst.orthoHeight = src.orthoHeight;
+
+        this.entity.enabled = this.enabled && this.scene.events.invoke('view.outlineSelection');
+        this.entity.camera.renderTarget = this.scene.camera.workRenderTarget;
     }
 }
 

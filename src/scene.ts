@@ -2,20 +2,17 @@ import {
     EVENT_POSTRENDER_LAYER,
     EVENT_PRERENDER_LAYER,
     LAYERID_DEPTH,
-    SORTMODE_CUSTOM,
+    SORTMODE_NONE,
     BoundingBox,
     CameraComponent,
     Color,
     Entity,
     Layer,
-    GraphicsDevice,
-    MeshInstance,
-    Vec3
+    GraphicsDevice
 } from 'playcanvas';
 
 import { AssetLoader } from './asset-loader';
 import { Camera } from './camera';
-import { CameraPoseGizmos } from './camera-pose-gizmos';
 import { DataProcessor } from './data-processor';
 import { Element, ElementType, ElementTypeList } from './element';
 import { Events } from './events';
@@ -28,52 +25,15 @@ import { Splat } from './splat';
 import { SplatOverlay } from './splat-overlay';
 import { Underlay } from './underlay';
 
-// sort meshInstances by the aabb corner furthest from the camera
-const corner = new Vec3();
-const specialSort = (instances: MeshInstance[], numInstances: number, cameraPos: Vec3, cameraDir: Vec3) => {
-    const distances = new Map<MeshInstance, number>();
-
-    for (let i = 0; i < numInstances; i++) {
-        const instance = instances[i];
-        const { aabb } = instance;
-        const { center, halfExtents } = aabb;
-
-        // loop over all 8 aabb corners and find the furthest distance along the camera view direction
-        let maxDist = -Infinity;
-        for (let cx = -1; cx <= 1; cx += 2) {
-            for (let cy = -1; cy <= 1; cy += 2) {
-                for (let cz = -1; cz <= 1; cz += 2) {
-                    corner.set(
-                        center.x + cx * halfExtents.x,
-                        center.y + cy * halfExtents.y,
-                        center.z + cz * halfExtents.z
-                    );
-                    // project camera-to-corner vector onto camera direction
-                    const dist = (corner.x - cameraPos.x) * cameraDir.x +
-                                    (corner.y - cameraPos.y) * cameraDir.y +
-                                    (corner.z - cameraPos.z) * cameraDir.z;
-                    if (dist > maxDist) {
-                        maxDist = dist;
-                    }
-                }
-            }
-        }
-
-        // store in map for reuse during sort
-        distances.set(instance, maxDist);
-    }
-
-    // sort instances back-to-front by calculated distance (furthest first)
-    instances.sort((a, b) => distances.get(b) - distances.get(a));
-};
-
 class Scene {
     events: Events;
     config: SceneConfig;
     canvas: HTMLCanvasElement;
     app: PCApp;
-    worldLayer: Layer;
-    splatLayer: Layer;
+    backgroundLayer: Layer;
+    shadowLayer: Layer;
+    debugLayer: Layer;
+    overlayLayer: Layer;
     gizmoLayer: Layer;
     sceneState = [new SceneState(), new SceneState()];
     elements: Element[] = [];
@@ -93,7 +53,6 @@ class Scene {
     dataProcessor: DataProcessor;
     assetLoader: AssetLoader;
     camera: Camera;
-    cameraPoseGizmos: CameraPoseGizmos;
     splatOverlay: SplatOverlay;
     grid: Grid;
     outline: Outline;
@@ -183,26 +142,56 @@ class Scene {
             camera.fire('postRenderLayer', layer, transparent);
         });
 
-        // get the world layer
-        this.worldLayer = this.app.scene.layers.getLayerByName('World');
-
-        // splat layer - dedicated layer for splat rendering with MRT
-        this.splatLayer = new Layer({
-            name: 'Splat',
-            opaqueSortMode: SORTMODE_CUSTOM,
-            transparentSortMode: SORTMODE_CUSTOM
+        // background layer
+        this.backgroundLayer = new Layer({
+            enabled: true,
+            name: 'Background Layer',
+            opaqueSortMode: SORTMODE_NONE,
+            transparentSortMode: SORTMODE_NONE
         });
-        this.splatLayer.customCalculateSortValues = specialSort;
+
+        // shadow layer
+        // this layer contains shadow caster scene mesh instances, shadow-casting
+        // virtual light, shadow catching plane geometry and the main camera.
+        this.shadowLayer = new Layer({
+            name: 'Shadow Layer'
+        });
+
+        // debug layer
+        this.debugLayer = new Layer({
+            enabled: true,
+            name: 'Debug Layer',
+            opaqueSortMode: SORTMODE_NONE,
+            transparentSortMode: SORTMODE_NONE
+        });
+
+        // overlay layer
+        this.overlayLayer = new Layer({
+            name: 'Overlay',
+            clearDepthBuffer: false,
+            opaqueSortMode: SORTMODE_NONE,
+            transparentSortMode: SORTMODE_NONE
+        });
 
         // gizmo layer
-        this.gizmoLayer = new Layer({ name: 'Gizmo' });
+        this.gizmoLayer = new Layer({
+            name: 'Gizmo',
+            clearDepthBuffer: true,
+            opaqueSortMode: SORTMODE_NONE,
+            transparentSortMode: SORTMODE_NONE
+        });
 
         const layers = this.app.scene.layers;
-        layers.push(this.splatLayer);
+        const worldLayer = layers.getLayerByName('World');
+        const idx = layers.getOpaqueIndex(worldLayer);
+        layers.insert(this.backgroundLayer, idx);
+        layers.insert(this.shadowLayer, idx + 1);
+        layers.insert(this.debugLayer, idx + 1);
+        layers.push(this.overlayLayer);
         layers.push(this.gizmoLayer);
 
         this.dataProcessor = new DataProcessor(this.app.graphicsDevice);
-        this.assetLoader = new AssetLoader(this.app, events);
+        this.assetLoader = new AssetLoader(this.app, events, this.app.graphicsDevice.maxAnisotropy);
 
         // create root entities
         this.contentRoot = new Entity('contentRoot');
@@ -214,9 +203,6 @@ class Scene {
         // create elements
         this.camera = new Camera();
         this.add(this.camera);
-
-        this.cameraPoseGizmos = new CameraPoseGizmos();
-        this.add(this.cameraPoseGizmos);
 
         this.splatOverlay = new SplatOverlay();
         this.add(this.splatOverlay);
@@ -244,11 +230,11 @@ class Scene {
     }
 
     // add a scene element
-    async add(element: Element) {
+    add(element: Element) {
         if (!element.scene) {
             // add the new element
             element.scene = this;
-            await element.add();
+            element.add();
             this.elements.push(element);
 
             // notify all elements of scene addition
@@ -364,7 +350,7 @@ class Scene {
 
         this.forEachElement(e => e.onPreRender());
 
-        this.events.fire('prerender', this.camera.worldTransform);
+        this.events.fire('prerender', this.camera.entity.getWorldTransform());
 
         // debug - display scene bound
         if (this.config.debug.showBound) {

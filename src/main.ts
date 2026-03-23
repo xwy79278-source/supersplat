@@ -1,4 +1,3 @@
-import { WebPCodec } from '@playcanvas/splat-transform';
 import { Color, createGraphicsDevice } from 'playcanvas';
 
 import { registerCameraPosesEvents } from './camera-poses';
@@ -14,7 +13,7 @@ import { registerRenderEvents } from './render';
 import { Scene } from './scene';
 import { getSceneConfig } from './scene-config';
 import { registerSelectionEvents } from './selection';
-import { ShortcutManager } from './shortcut-manager';
+import { Shortcuts } from './shortcuts';
 import { registerTimelineEvents } from './timeline';
 import { BoxSelection } from './tools/box-selection';
 import { BrushSelection } from './tools/brush-selection';
@@ -29,7 +28,6 @@ import { RotateTool } from './tools/rotate-tool';
 import { ScaleTool } from './tools/scale-tool';
 import { SphereSelection } from './tools/sphere-selection';
 import { ToolManager } from './tools/tool-manager';
-import { registerTrackManagerEvents } from './track-manager';
 import { registerTransformHandlerEvents } from './transform-handler';
 import { EditorUI } from './ui/editor';
 import { localizeInit } from './ui/localization';
@@ -73,6 +71,40 @@ const getURLArgs = () => {
     return config;
 };
 
+const initShortcuts = (events: Events) => {
+    const shortcuts = new Shortcuts(events);
+
+    shortcuts.register(['Delete', 'Backspace'], { event: 'select.delete' });
+    shortcuts.register(['Escape'], { event: 'tool.deactivate' });
+    shortcuts.register(['Tab'], { event: 'selection.next' });
+    shortcuts.register(['1'], { event: 'tool.move', sticky: true });
+    shortcuts.register(['2'], { event: 'tool.rotate', sticky: true });
+    shortcuts.register(['3'], { event: 'tool.scale', sticky: true });
+    shortcuts.register(['G', 'g'], { event: 'grid.toggleVisible' });
+    shortcuts.register(['C', 'c'], { event: 'tool.toggleCoordSpace' });
+    shortcuts.register(['F', 'f'], { event: 'camera.focus' });
+    shortcuts.register(['R', 'r'], { event: 'tool.rectSelection', sticky: true });
+    shortcuts.register(['P', 'p'], { event: 'tool.polygonSelection', sticky: true });
+    shortcuts.register(['L', 'l'], { event: 'tool.lassoSelection', sticky: true });
+    shortcuts.register(['B', 'b'], { event: 'tool.brushSelection', sticky: true });
+    shortcuts.register(['O', 'o'], { event: 'tool.floodSelection', sticky: true });
+    shortcuts.register(['E', 'e'], { event: 'tool.eyedropperSelection', sticky: true });
+    shortcuts.register(['A', 'a'], { event: 'select.all', ctrl: true });
+    shortcuts.register(['A', 'a'], { event: 'select.none', shift: true });
+    shortcuts.register(['I', 'i'], { event: 'select.invert', ctrl: true });
+    shortcuts.register(['H', 'h'], { event: 'select.hide' });
+    shortcuts.register(['U', 'u'], { event: 'select.unhide' });
+    shortcuts.register(['['], { event: 'tool.brushSelection.smaller' });
+    shortcuts.register([']'], { event: 'tool.brushSelection.bigger' });
+    shortcuts.register(['Z', 'z'], { event: 'edit.undo', ctrl: true, capture: true });
+    shortcuts.register(['Z', 'z'], { event: 'edit.redo', ctrl: true, shift: true, capture: true });
+    shortcuts.register(['M', 'm'], { event: 'camera.toggleMode' });
+    shortcuts.register(['D', 'd'], { event: 'dataPanel.toggle' });
+    shortcuts.register([' '], { event: 'camera.toggleOverlay' });
+
+    return shortcuts;
+};
+
 const main = async () => {
     // root events object
     const events = new Events();
@@ -85,22 +117,6 @@ const main = async () => {
 
     // init localization
     await localizeInit();
-
-    // Configure WebP WASM for SOG format (used for both reading and writing)
-    WebPCodec.wasmUrl = new URL('static/lib/webp/webp.wasm', document.baseURI).toString();
-
-    // register events that only need the events object (before UI is created)
-    registerTimelineEvents(events);
-    registerCameraPosesEvents(events);
-    registerTrackManagerEvents(events);
-    registerTransformHandlerEvents(events);
-    registerPlySequenceEvents(events);
-    registerPublishEvents(events);
-    registerIframeApi(events);
-
-    // initialize shortcuts
-    const shortcutManager = new ShortcutManager(events);
-    events.function('shortcutManager', () => shortcutManager);
 
     // editor ui
     const editorUI = new EditorUI(events);
@@ -235,11 +251,17 @@ const main = async () => {
 
     window.scene = scene;
 
-    // register events that need scene or other dependencies
     registerEditorEvents(events, editHistory, scene);
     registerSelectionEvents(events, scene);
+    registerTimelineEvents(events);
+    registerCameraPosesEvents(events);
+    registerTransformHandlerEvents(events);
+    registerPlySequenceEvents(events);
+    registerPublishEvents(events);
     registerDocEvents(scene, events);
     registerRenderEvents(scene, events);
+    registerIframeApi(events);
+    initShortcuts(events);
     initFileHandler(scene, events, editorUI.appContainer.dom);
 
     // load async models
@@ -247,19 +269,13 @@ const main = async () => {
 
     // handle load params
     const loadList = url.searchParams.getAll('load');
-    const filenameList = url.searchParams.getAll('filename');
-    for (const [i, value] of loadList.entries()) {
+    for (const value of loadList) {
         const decoded = decodeURIComponent(value);
-        const filename = i < filenameList.length ?
-            decodeURIComponent(filenameList[i]) :
-            decoded.split('/').pop();
-
         await events.invoke('import', [{
-            filename,
+            filename: decoded.split('/').pop(),
             url: decoded
         }]);
     }
-
 
     // handle OS-based file association in PWA mode
     if ('launchQueue' in window) {

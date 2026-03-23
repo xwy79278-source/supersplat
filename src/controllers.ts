@@ -5,7 +5,6 @@ import { Camera } from './camera';
 const fromWorldPoint = new Vec3();
 const toWorldPoint = new Vec3();
 const worldDiff = new Vec3();
-const moveVec = new Vec3();
 
 // calculate the distance between two 2d points
 const dist = (x0: number, y0: number, x1: number, y1: number) => Math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2);
@@ -16,21 +15,16 @@ class PointerController {
 
     constructor(camera: Camera, target: HTMLElement) {
 
-        // Orbit mode: rotate camera around the focal point
         const orbit = (dx: number, dy: number) => {
             const azim = camera.azim - dx * camera.scene.config.controls.orbitSensitivity;
             const elev = camera.elevation - dy * camera.scene.config.controls.orbitSensitivity;
             camera.setAzimElev(azim, elev);
         };
 
-        const look = (dx: number, dy: number) => {
-            camera.look(dx, dy);
-        };
-
         const pan = (x: number, y: number, dx: number, dy: number) => {
             // For panning to work at any zoom level, we use screen point to world projection
             // to work out how far we need to pan the pivotEntity in world space
-            const c = camera.camera;
+            const c = camera.entity.camera;
             const distance = camera.distanceTween.value.distance * camera.sceneRadius / camera.fovFactor;
 
             c.screenToWorld(x, y, distance, fromWorldPoint);
@@ -118,40 +112,18 @@ class PointerController {
                 x = event.offsetX;
                 y = event.offsetY;
 
-                if (camera.controlMode === 'fly') {
-                    // Fly mode: left-drag to look around, middle to zoom, right works same as orbit
-                    if (pressedButton === 0) {
-                        look(dx, dy);
-                    } else if (pressedButton === 1) {
-                        zoom(dy * -0.02);
-                    } else if (pressedButton === 2) {
-                        // Right button: same behavior as orbit mode
-                        const mod = event.shiftKey || event.ctrlKey ? 'look' :
-                            (event.altKey || event.metaKey ? 'zoom' : 'pan');
+                // right button can be used to orbit with ctrl key and to zoom with alt | meta key
+                const mod = pressedButton === 2 ?
+                    (event.shiftKey || event.ctrlKey ? 'orbit' :
+                        (event.altKey || event.metaKey ? 'zoom' : null)) :
+                    null;
 
-                        if (mod === 'look') {
-                            look(dx, dy);
-                        } else if (mod === 'zoom') {
-                            zoom(dy * -0.02);
-                        } else {
-                            pan(x, y, dx, dy);
-                        }
-                    }
-                } else {
-                    // Orbit mode: existing behavior
-                    // right button can be used to orbit with ctrl key and to zoom with alt | meta key
-                    const mod = pressedButton === 2 ?
-                        (event.shiftKey || event.ctrlKey ? 'orbit' :
-                            (event.altKey || event.metaKey ? 'zoom' : null)) :
-                        null;
-
-                    if (mod === 'orbit' || (mod === null && pressedButton === 0)) {
-                        orbit(dx, dy);
-                    } else if (mod === 'zoom' || (mod === null && pressedButton === 1)) {
-                        zoom(dy * -0.02);
-                    } else if (mod === 'pan' || (mod === null && pressedButton === 2)) {
-                        pan(x, y, dx, dy);
-                    }
+                if (mod === 'orbit' || (mod === null && pressedButton === 0)) {
+                    orbit(dx, dy);
+                } else if (mod === 'zoom' || (mod === null && pressedButton === 1)) {
+                    zoom(dy * -0.02);
+                } else if (mod === 'pan' || (mod === null && pressedButton === 2)) {
+                    pan(x, y, dx, dy);
                 }
             } else {
                 if (touches.length === 1) {
@@ -160,12 +132,7 @@ class PointerController {
                     const dy = event.offsetY - touch.y;
                     touch.x = event.offsetX;
                     touch.y = event.offsetY;
-
-                    if (camera.controlMode === 'fly') {
-                        look(dx, dy);
-                    } else {
-                        orbit(dx, dy);
-                    }
+                    orbit(dx, dy);
                 } else if (touches.length === 2) {
                     const touch = touches[touches.map(t => t.id).indexOf(event.pointerId)];
                     touch.x = event.offsetX;
@@ -175,18 +142,8 @@ class PointerController {
                     const my = (touches[0].y + touches[1].y) * 0.5;
                     const ml = dist(touches[0].x, touches[0].y, touches[1].x, touches[1].y);
 
-                    if (camera.controlMode === 'fly') {
-                        // In fly mode, pinch moves forward/backward by moving focal point
-                        const zoomDelta = (ml - midlen) * 0.01;
-                        const worldTransform = camera.mainCamera.getWorldTransform();
-                        const zAxis = worldTransform.getZ();
-                        moveVec.copy(zAxis).mulScalar(-zoomDelta * camera.flySpeed);
-                        const p = camera.focalPoint.add(moveVec);
-                        camera.setFocalPoint(p);
-                    } else {
-                        pan(mx, my, (mx - midx), (my - midy));
-                        zoom((ml - midlen) * 0.01);
-                    }
+                    pan(mx, my, (mx - midx), (my - midy));
+                    zoom((ml - midlen) * 0.01);
 
                     midx = mx;
                     midy = my;
@@ -205,25 +162,14 @@ class PointerController {
         const wheel = (event: WheelEvent) => {
             const { deltaX, deltaY } = event;
 
-            if (camera.controlMode === 'fly') {
-                // Fly mode: wheel moves forward/backward by moving focal point
-                const factor = camera.flySpeed * 0.01;
-                const worldTransform = camera.mainCamera.getWorldTransform();
-                const zAxis = worldTransform.getZ();
-                moveVec.copy(zAxis).mulScalar(deltaY * factor);
-                const p = camera.focalPoint.add(moveVec);
-                camera.setFocalPoint(p);
+            if (isMouseEvent(deltaX, deltaY)) {
+                zoom(deltaY * -0.002);
+            } else if (event.ctrlKey || event.metaKey) {
+                zoom(deltaY * -0.02);
+            } else if (event.shiftKey) {
+                pan(event.offsetX, event.offsetY, deltaX, deltaY);
             } else {
-                // Orbit mode: existing behavior
-                if (isMouseEvent(deltaX, deltaY)) {
-                    zoom(deltaY * -0.002);
-                } else if (event.ctrlKey || event.metaKey) {
-                    zoom(deltaY * -0.02);
-                } else if (event.shiftKey) {
-                    pan(event.offsetX, event.offsetY, deltaX, deltaY);
-                } else {
-                    orbit(deltaX, deltaY);
-                }
+                orbit(deltaX, deltaY);
             }
 
             event.preventDefault();
@@ -234,127 +180,40 @@ class PointerController {
 
         const dblclick = (event: globalThis.MouseEvent) => {
             if (event.target === target || event.target === canvas) {
-                // Switch to orbit mode when double-clicking to focus
-                if (camera.controlMode === 'fly') {
-                    camera.scene.events.fire('camera.setControlMode', 'orbit');
-                }
-                camera.pickFocalPoint(event.offsetX / target.clientWidth, event.offsetY / target.clientHeight);
+                camera.pickFocalPoint(event.offsetX, event.offsetY);
             }
         };
 
-        // fly movement state (updated via shortcut events)
-        let flyForward = false;
-        let flyBackward = false;
-        let flyLeft = false;
-        let flyRight = false;
-        let flyDown = false;
-        let flyUp = false;
-
-        // track modifier keys for speed control (updated via shortcut events)
-        let fastDown = false;
-        let slowDown = false;
-
-        // Clear all keys when window loses focus to prevent stuck keys
-        const clearAllKeys = () => {
-            flyForward = false;
-            flyBackward = false;
-            flyLeft = false;
-            flyRight = false;
-            flyDown = false;
-            flyUp = false;
-            fastDown = false;
-            slowDown = false;
+        // key state
+        const keys: any = {
+            ArrowUp: 0,
+            ArrowDown: 0,
+            ArrowLeft: 0,
+            ArrowRight: 0
         };
 
-        // Helper to switch to fly mode when a fly key is pressed
-        const handleFlyKey = (down: boolean) => {
-            if (down && camera.controlMode !== 'fly') {
-                camera.scene.events.fire('camera.setControlMode', 'fly');
+        const keydown = (event: KeyboardEvent) => {
+            if (keys.hasOwnProperty(event.key) && event.target === document.body) {
+                keys[event.key] = event.shiftKey ? 10 : (event.ctrlKey || event.metaKey || event.altKey ? 0.1 : 1);
             }
         };
 
-        // Listen for fly movement shortcut events
-        const events = camera.scene.events;
-
-        const onFlyForward = (down: boolean) => {
-            flyForward = down;
-            handleFlyKey(down);
+        const keyup = (event: KeyboardEvent) => {
+            if (keys.hasOwnProperty(event.key)) {
+                keys[event.key] = 0;
+            }
         };
-        const onFlyBackward = (down: boolean) => {
-            flyBackward = down;
-            handleFlyKey(down);
-        };
-        const onFlyLeft = (down: boolean) => {
-            flyLeft = down;
-            handleFlyKey(down);
-        };
-        const onFlyRight = (down: boolean) => {
-            flyRight = down;
-            handleFlyKey(down);
-        };
-        const onFlyDown = (down: boolean) => {
-            flyDown = down;
-            handleFlyKey(down);
-        };
-        const onFlyUp = (down: boolean) => {
-            flyUp = down;
-            handleFlyKey(down);
-        };
-        const onModifierFast = (down: boolean) => {
-            fastDown = down;
-        };
-        const onModifierSlow = (down: boolean) => {
-            slowDown = down;
-        };
-
-        events.on('camera.fly.forward', onFlyForward);
-        events.on('camera.fly.backward', onFlyBackward);
-        events.on('camera.fly.left', onFlyLeft);
-        events.on('camera.fly.right', onFlyRight);
-        events.on('camera.fly.down', onFlyDown);
-        events.on('camera.fly.up', onFlyUp);
-        events.on('camera.modifier.fast', onModifierFast);
-        events.on('camera.modifier.slow', onModifierSlow);
 
         this.update = (deltaTime: number) => {
-            if (camera.controlMode !== 'fly') return;
+            const x = keys.ArrowRight - keys.ArrowLeft;
+            const z = keys.ArrowDown - keys.ArrowUp;
 
-            // Fly mode: WASD for movement, Q/E for up/down - moves focal point
-            const forward = (flyForward ? 1 : 0) - (flyBackward ? 1 : 0);
-            const strafe = (flyRight ? 1 : 0) - (flyLeft ? 1 : 0);
-            const vertical = (flyUp ? 1 : 0) - (flyDown ? 1 : 0);
-
-            if (forward || strafe || vertical) {
-                // Calculate speed modifier based on current modifier key state
-                const speedMod = fastDown ? 10 : (slowDown ? 0.1 : 1);
-                const factor = deltaTime * camera.flySpeed * speedMod;
-                const worldTransform = camera.worldTransform;
-
-                moveVec.set(0, 0, 0);
-
-                // Forward/backward along horizontal forward direction (fixed Y)
-                if (forward) {
-                    const zAxis = worldTransform.getZ();
-                    zAxis.y = 0;
-                    zAxis.normalize();
-                    moveVec.add(zAxis.mulScalar(-forward * factor));
-                }
-
-                // Strafe left/right (horizontal)
-                if (strafe) {
-                    const xAxis = worldTransform.getX();
-                    xAxis.y = 0;
-                    xAxis.normalize();
-                    moveVec.add(xAxis.mulScalar(strafe * factor));
-                }
-
-                // Up/down in world space
-                if (vertical) {
-                    moveVec.y += vertical * factor;
-                }
-
-                // Move the focal point (camera follows due to orbit calculation)
-                const p = camera.focalPoint.add(moveVec);
+            if (x || z) {
+                const factor = deltaTime * camera.flySpeed;
+                const worldTransform = camera.entity.getWorldTransform();
+                const xAxis = worldTransform.getX().mulScalar(x * factor);
+                const zAxis = worldTransform.getZ().mulScalar(z * factor);
+                const p = camera.focalPoint.add(xAxis).add(zAxis);
                 camera.setFocalPoint(p);
             }
         };
@@ -378,19 +237,10 @@ class PointerController {
         wrap(target, 'pointermove', pointermove);
         wrap(target, 'wheel', wheel, { passive: false });
         wrap(target, 'dblclick', dblclick);
-        wrap(window, 'blur', clearAllKeys);
+        wrap(document, 'keydown', keydown);
+        wrap(document, 'keyup', keyup);
 
-        this.destroy = () => {
-            destroy?.();
-            events.off('camera.fly.forward', onFlyForward);
-            events.off('camera.fly.backward', onFlyBackward);
-            events.off('camera.fly.left', onFlyLeft);
-            events.off('camera.fly.right', onFlyRight);
-            events.off('camera.fly.down', onFlyDown);
-            events.off('camera.fly.up', onFlyUp);
-            events.off('camera.modifier.fast', onModifierFast);
-            events.off('camera.modifier.slow', onModifierSlow);
-        };
+        this.destroy = destroy;
     }
 }
 

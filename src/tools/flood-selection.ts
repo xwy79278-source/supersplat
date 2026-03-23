@@ -45,8 +45,8 @@ class FloodSelection {
 
         canvasContainer.append(selectToolbar);
 
-        const apply = async (op: 'set' | 'add' | 'remove') => {
-            await events.invoke(
+        const apply = (op: 'set' | 'add' | 'remove') => {
+            events.fire(
                 'select.byMask',
                 op,
                 canvas,
@@ -131,7 +131,7 @@ class FloodSelection {
 
                 await refreshSelection();
 
-                await apply(e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'));
+                apply(e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'));
 
                 context.clearRect(0, 0, canvas.width, canvas.height);
             }

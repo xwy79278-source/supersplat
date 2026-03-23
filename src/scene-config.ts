@@ -14,15 +14,16 @@ const sceneConfig = {
     camera: {
         pixelScale: 1,
         multisample: false,
-        fov: 75,
+        fov: 65,
         exposure: 1.0,
         toneMapping: 'linear',
-        overlay: false
+        debugRender: '',
+        overlay: true,
+        highPrecision: true
     },
     show: {
         grid: true,
         bound: true,
-        cameraPoses: false,
         shBands: 3
     },
     controls: {

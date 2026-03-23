@@ -1,7 +1,5 @@
 import { Color, Mat4 } from 'playcanvas';
 
-import { AnimTrack } from './anim-track';
-import { IndexRanges, sortedPredicate } from './index-ranges';
 import { Pivot } from './pivot';
 import { Scene } from './scene';
 import { Splat } from './splat';
@@ -10,70 +8,75 @@ import { Transform } from './transform';
 
 interface EditOp {
     name: string;
-    do(): void | Promise<void>;
-    undo(): void | Promise<void>;
+    do(): void;
+    undo(): void;
     destroy?(): void;
 }
 
-const enum BitOp {
-    SET,
-    CLEAR,
-    TOGGLE
-}
-
-class StateOp {
-    splat: Splat;
-    ranges: IndexRanges;
-    mask: number;
-    op: BitOp;
-    updateFlags: number;
-
-    constructor(splat: Splat, ranges: IndexRanges, mask: number, op: BitOp, updateFlags = State.selected) {
-        this.splat = splat;
-        this.ranges = ranges;
-        this.mask = mask;
-        this.op = op;
-        this.updateFlags = updateFlags;
+// build an index array based on a boolean predicate over indices
+const buildIndex = (total: number, pred: (i: number) => boolean) => {
+    let num = 0;
+    for (let i = 0; i < total; ++i) {
+        if (pred(i)) num++;
     }
 
-    private apply(op: BitOp) {
-        const state = this.splat.splatData.getProp('state') as Uint8Array;
-        const { mask } = this;
-
-        switch (op) {
-            case BitOp.SET:
-                this.ranges.forEach((i) => {
-                    state[i] |= mask;
-                });
-                break;
-            case BitOp.CLEAR:
-                this.ranges.forEach((i) => {
-                    state[i] &= ~mask;
-                });
-                break;
-            case BitOp.TOGGLE:
-                this.ranges.forEach((i) => {
-                    state[i] ^= mask;
-                });
-                break;
+    const result = new Uint32Array(num);
+    let idx = 0;
+    for (let i = 0; i < total; ++i) {
+        if (pred(i)) {
+            result[idx++] = i;
         }
     }
 
-    async do() {
-        this.apply(this.op);
-        await this.splat.updateState(this.updateFlags);
+    return result;
+};
+
+type filterFunc = (state: number, index: number) => boolean;
+type doFunc = (state: number) => number;
+type undoFunc = (state: number) => number;
+
+class StateOp {
+    splat: Splat;
+    indices: Uint32Array;
+    doIt: doFunc;
+    undoIt: undoFunc;
+    updateFlags: number;
+
+    constructor(splat: Splat, filter: filterFunc, doIt: doFunc, undoIt: undoFunc, updateFlags = State.selected) {
+        const splatData = splat.splatData;
+        const state = splatData.getProp('state') as Uint8Array;
+        const indices = buildIndex(splatData.numSplats, i => filter(state[i], i));
+
+        this.splat = splat;
+        this.indices = indices;
+        this.doIt = doIt;
+        this.undoIt = undoIt;
+        this.updateFlags = updateFlags;
     }
 
-    async undo() {
-        const undoOp = this.op === BitOp.TOGGLE ? BitOp.TOGGLE :
-            this.op === BitOp.SET ? BitOp.CLEAR : BitOp.SET;
-        this.apply(undoOp);
-        await this.splat.updateState(this.updateFlags);
+    do() {
+        const splatData = this.splat.splatData;
+        const state = splatData.getProp('state') as Uint8Array;
+        for (let i = 0; i < this.indices.length; ++i) {
+            const idx = this.indices[i];
+            state[idx] = this.doIt(state[idx]);
+        }
+        this.splat.updateState(this.updateFlags);
+    }
+
+    undo() {
+        const splatData = this.splat.splatData;
+        const state = splatData.getProp('state') as Uint8Array;
+        for (let i = 0; i < this.indices.length; ++i) {
+            const idx = this.indices[i];
+            state[idx] = this.undoIt(state[idx]);
+        }
+        this.splat.updateState(this.updateFlags);
     }
 
     destroy() {
         this.splat = null;
-        this.ranges = null;
+        this.indices = null;
     }
 }
 
@@ -81,8 +84,11 @@ class SelectAllOp extends StateOp {
     name = 'selectAll';
 
     constructor(splat: Splat) {
-        const state = splat.splatData.getProp('state') as Uint8Array;
-        super(splat, IndexRanges.fromPredicate(splat.splatData.numSplats, i => state[i] === 0), State.selected, BitOp.SET);
+        super(splat,
+            state => state === 0,
+            state => state | State.selected,
+            state => state & (~State.selected)
+        );
     }
 }
 
@@ -90,8 +96,11 @@ class SelectNoneOp extends StateOp {
     name = 'selectNone';
 
     constructor(splat: Splat) {
-        const state = splat.splatData.getProp('state') as Uint8Array;
-        super(splat, IndexRanges.fromPredicate(splat.splatData.numSplats, i => state[i] === State.selected), State.selected, BitOp.CLEAR);
+        super(splat,
+            state => state === State.selected,
+            state => state & (~State.selected),
+            state => state | State.selected
+        );
     }
 }
 
@@ -99,29 +108,37 @@ class SelectInvertOp extends StateOp {
     name = 'selectInvert';
 
     constructor(splat: Splat) {
-        const state = splat.splatData.getProp('state') as Uint8Array;
-        super(splat, IndexRanges.fromPredicate(splat.splatData.numSplats, i => (state[i] & (State.locked | State.deleted)) === 0), State.selected, BitOp.TOGGLE);
+        super(splat,
+            state => (state & (State.locked | State.deleted)) === 0,
+            state => state ^ State.selected,
+            state => state ^ State.selected
+        );
     }
 }
 
 class SelectOp extends StateOp {
     name = 'selectOp';
 
-    constructor(splat: Splat, op: 'add' | 'remove' | 'set', filter: ((i: number) => boolean) | Uint32Array) {
-        const splatData = splat.splatData;
-        const state = splatData.getProp('state') as Uint8Array;
-        const bitOp = op === 'add' ? BitOp.SET : op === 'remove' ? BitOp.CLEAR : BitOp.TOGGLE;
-
-        // wrap sorted IDs in a cursor-based predicate
-        const pred = filter instanceof Uint32Array ? sortedPredicate(filter) : filter;
-
-        const preds = {
-            add: (i: number) => pred(i) && state[i] === 0,
-            remove: (i: number) => pred(i) && state[i] === State.selected,
-            set: (i: number) => (state[i] === State.selected) !== pred(i)
+    constructor(splat: Splat, op: 'add'|'remove'|'set', filter: (i: number) => boolean) {
+        const filterFunc = {
+            add: (state: number, index: number) => (state === 0) && filter(index),
+            remove: (state: number, index: number) => (state === State.selected) && filter(index),
+            set: (state: number, index: number) => (state === State.selected) !== filter(index)
         };
 
-        super(splat, IndexRanges.fromPredicate(splatData.numSplats, preds[op]), State.selected, bitOp);
+        const doIt = {
+            add: (state: number) => state | State.selected,
+            remove: (state: number) => state & (~State.selected),
+            set: (state: number) => state ^ State.selected
+        };
+
+        const undoIt = {
+            add: (state: number) => state & (~State.selected),
+            remove: (state: number) => state | State.selected,
+            set: (state: number) => state ^ State.selected
+        };
+
+        super(splat, filterFunc[op], doIt[op], undoIt[op]);
     }
 }
 
@@ -129,8 +146,12 @@ class HideSelectionOp extends StateOp {
     name = 'hideSelection';
 
     constructor(splat: Splat) {
-        const state = splat.splatData.getProp('state') as Uint8Array;
-        super(splat, IndexRanges.fromPredicate(splat.splatData.numSplats, i => state[i] === State.selected), State.locked, BitOp.SET, State.locked);
+        super(splat,
+            state => state === State.selected,
+            state => state | State.locked,
+            state => state & (~State.locked),
+            State.locked
+        );
     }
 }
 
@@ -138,8 +159,12 @@ class UnhideAllOp extends StateOp {
     name = 'unhideAll';
 
     constructor(splat: Splat) {
-        const state = splat.splatData.getProp('state') as Uint8Array;
-        super(splat, IndexRanges.fromPredicate(splat.splatData.numSplats, i => (state[i] & (State.locked | State.deleted)) === State.locked), State.locked, BitOp.CLEAR, State.locked);
+        super(splat,
+            state => (state & (State.locked | State.deleted)) === State.locked,
+            state => state & (~State.locked),
+            state => state | State.locked,
+            State.locked
+        );
     }
 }
 
@@ -147,8 +172,12 @@ class DeleteSelectionOp extends StateOp {
     name = 'deleteSelection';
 
     constructor(splat: Splat) {
-        const state = splat.splatData.getProp('state') as Uint8Array;
-        super(splat, IndexRanges.fromPredicate(splat.splatData.numSplats, i => state[i] === State.selected), State.deleted, BitOp.SET, State.deleted);
+        super(splat,
+            state => state === State.selected,
+            state => state | State.deleted,
+            state => state & (~State.deleted),
+            State.deleted
+        );
     }
 }
 
@@ -156,8 +185,12 @@ class ResetOp extends StateOp {
     name = 'reset';
 
     constructor(splat: Splat) {
-        const state = splat.splatData.getProp('state') as Uint8Array;
-        super(splat, IndexRanges.fromPredicate(splat.splatData.numSplats, i => (state[i] & State.deleted) !== 0), State.deleted, BitOp.CLEAR, State.deleted);
+        super(splat,
+            state => (state & State.deleted) !== 0,
+            state => state & (~State.deleted),
+            state => state | State.deleted,
+            State.deleted
+        );
     }
 }
 
@@ -205,7 +238,7 @@ class SplatsTransformOp {
         this.paletteMap = options.paletteMap;
     }
 
-    async do() {
+    do() {
         const { splat, transform, paletteMap } = this;
         const state = splat.splatData.getProp('state') as Uint8Array;
         const indices = splat.transformTexture.lock() as Uint16Array;
@@ -229,10 +262,11 @@ class SplatsTransformOp {
             transformPalette.setTransform(newIdx, mat);
         });
 
-        await splat.updatePositions();
+        splat.makeSelectionBoundDirty();
+        splat.updatePositions();
     }
 
-    async undo() {
+    undo() {
         const { splat, paletteMap } = this;
         const state = splat.splatData.getProp('state') as Uint8Array;
         const indices = splat.transformTexture.lock() as Uint16Array;
@@ -254,7 +288,8 @@ class SplatsTransformOp {
 
         splat.transformPalette.free(paletteMap.size);
 
-        await splat.updatePositions();
+        splat.makeSelectionBoundDirty();
+        splat.updatePositions();
     }
 
     destroy() {
@@ -334,30 +369,6 @@ class SetSplatColorAdjustmentOp {
     }
 }
 
-// Snapshot-based undo/redo for animation track edits.
-// Captures the full track state before and after a mutation.
-class AnimTrackEditOp {
-    name: string;
-    track: AnimTrack;
-    before: unknown;
-    after: unknown;
-
-    constructor(name: string, track: AnimTrack, before: unknown, after: unknown) {
-        this.name = name;
-        this.track = track;
-        this.before = before;
-        this.after = after;
-    }
-
-    do() {
-        this.track.restore(this.after);
-    }
-
-    undo() {
-        this.track.restore(this.before);
-    }
-}
-
 class MultiOp {
     name = 'multiOp';
     ops: EditOp[];
@@ -366,16 +377,12 @@ class MultiOp {
         this.ops = ops;
     }
 
-    async do() {
-        for (const op of this.ops) {
-            await op.do();
-        }
+    do() {
+        this.ops.forEach(op => op.do());
     }
 
-    async undo() {
-        for (const op of this.ops) {
-            await op.undo();
-        }
+    undo() {
+        this.ops.forEach(op => op.undo());
     }
 }
 
@@ -389,8 +396,8 @@ class AddSplatOp {
         this.splat = splat;
     }
 
-    async do() {
-        await this.scene.add(this.splat);
+    do() {
+        this.scene.add(this.splat);
     }
 
     undo() {
@@ -438,7 +445,6 @@ export {
     PlacePivotOp,
     ColorAdjustment,
     SetSplatColorAdjustmentOp,
-    AnimTrackEditOp,
     MultiOp,
     AddSplatOp,
     SplatRenameOp

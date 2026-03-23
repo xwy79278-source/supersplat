@@ -5,7 +5,6 @@ import { localize } from './localization';
 import { SplatList } from './splat-list';
 import sceneImportSvg from './svg/import.svg';
 import sceneNewSvg from './svg/new.svg';
-import soloSvg from './svg/solo.svg';
 import { Tooltips } from './tooltips';
 import { Transform } from './transform';
 
@@ -43,23 +42,6 @@ class ScenePanel extends Container {
             class: 'panel-header-label'
         });
 
-        let soloActive = false;
-
-        const soloToggle = new Container({
-            class: 'panel-header-button'
-        });
-        soloToggle.dom.appendChild(createSvg(soloSvg));
-
-        soloToggle.on('click', () => {
-            soloActive = !soloActive;
-            if (soloActive) {
-                soloToggle.class.add('active');
-            } else {
-                soloToggle.class.remove('active');
-            }
-            events.fire('scene.solo', soloActive);
-        });
-
         const sceneImport = new Container({
             class: 'panel-header-button'
         });
@@ -72,7 +54,6 @@ class ScenePanel extends Container {
 
         sceneHeader.append(sceneIcon);
         sceneHeader.append(sceneLabel);
-        sceneHeader.append(soloToggle);
         sceneHeader.append(sceneImport);
         sceneHeader.append(sceneNew);
 
@@ -84,7 +65,6 @@ class ScenePanel extends Container {
             events.invoke('doc.new');
         });
 
-        tooltips.register(soloToggle, localize('tooltip.scene.solo'), 'top');
         tooltips.register(sceneImport, 'Import Scene', 'top');
         tooltips.register(sceneNew, 'New Scene', 'top');
 

@@ -94,7 +94,7 @@ class MeasureTool {
         selectToolbar.append(lengthInput);
         canvasContainer.append(selectToolbar);
 
-        const gizmo = new TranslateGizmo(scene.camera.camera, scene.gizmoLayer);
+        const gizmo = new TranslateGizmo(scene.camera.entity.camera, scene.gizmoLayer);
         const entity = new Entity('measureGizmoPivot');
         const transformHandler = new MeasureTransformHandler();
 
@@ -292,7 +292,7 @@ class MeasureTool {
             clicked = false;
         };
 
-        const pointerup = async (e: PointerEvent) => {
+        const pointerup = (e: PointerEvent) => {
             if (splat && clicked && isPrimary(e)) {
                 clicked = false;
 
@@ -315,7 +315,7 @@ class MeasureTool {
                 }
 
                 if (splat.measurePoints.length < 2) {
-                    const result = await scene.camera.intersect(e.offsetX / canvasContainer.dom.clientWidth, e.offsetY / canvasContainer.dom.clientHeight);
+                    const result = scene.camera.intersect(e.offsetX, e.offsetY);
                     if (result) {
                         mat.invert(splat.worldTransform);
                         mat.transformPoint(result.position, p);

@@ -1,9 +1,8 @@
-import { ZipFileSystem, ZipReadFileSystem } from '@playcanvas/splat-transform';
-
 import { Events } from './events';
-import { BrowserFileSystem, BlobReadSource } from './io';
 import { recentFiles } from './recent-files';
 import { Scene } from './scene';
+import { DownloadWriter, FileStreamWriter } from './serialize/writer';
+import { ZipWriter } from './serialize/zip-writer';
 import { Splat } from './splat';
 import { serializePly } from './splat-serialize';
 import { Transform } from './transform';
@@ -13,7 +12,7 @@ import { localize } from './ui/localization';
 type FilePickerAcceptType = unknown;
 
 const SuperFileType: FilePickerAcceptType[] = [{
-    description: 'SuperSplat document',
+    description: 'PointCosm document',
     accept: {
         'application/x-supersplat': ['.ssproj']
     }
@@ -85,31 +84,32 @@ const registerDocEvents = (scene: Scene, events: Events) => {
     // load the document from the given file
     const loadDocument = async (file: File) => {
         events.fire('startSpinner');
-
-        // Create streaming ZIP reader from the file
-        const blobSource = new BlobReadSource(file);
-        const zipFs = new ZipReadFileSystem(blobSource);
-
         try {
             // reset the scene
             resetScene();
 
-            // read document.json via streaming (only reads what's needed)
-            const docSource = await zipFs.createSource('document.json');
-            const docData = await docSource.read().readAll();
-            docSource.close();
-            const document = JSON.parse(new TextDecoder().decode(docData));
+            // read the document
+            /* global JSZip */
+            // @ts-ignore
+            const zip = new JSZip();
+            await zip.loadAsync(file);
+            const document = JSON.parse(await zip.file('document.json').async('text'));
 
             // run through each splat and load it
             for (let i = 0; i < document.splats.length; ++i) {
                 const filename = `splat_${i}.ply`;
                 const splatSettings = document.splats[i];
 
-                // load splat directly from the zip filesystem (streams on-demand)
-                // skipReorder=true because ssproj PLY files are already in morton order
-                const splat = await scene.assetLoader.load(filename, zipFs, false, true);
+                // construct the splat asset
+                const contents = await zip.file(`splat_${i}.ply`).async('blob');
+                const url = URL.createObjectURL(contents);
+                const splat = await scene.assetLoader.load({
+                    url,
+                    filename
+                });
+                URL.revokeObjectURL(url);
 
-                await scene.add(splat);
+                scene.add(splat);
 
                 splat.docDeserialize(splatSettings);
             }
@@ -121,7 +121,7 @@ const registerDocEvents = (scene: Scene, events: Events) => {
             }
 
             events.invoke('docDeserialize.timeline', document.timeline);
-            events.invoke('docDeserialize.poseSets', document.poseSets, document.camera?.fov);
+            events.invoke('docDeserialize.poseSets', document.poseSets);
             events.invoke('docDeserialize.view', document.view);
             scene.camera.docDeserialize(document.camera);
 
@@ -141,8 +141,6 @@ const registerDocEvents = (scene: Scene, events: Events) => {
                 message: `'${error.message ?? error}'`
             });
         } finally {
-            // Clean up resources
-            zipFs.close();
             events.fire('stopSpinner');
         }
     };
@@ -171,23 +169,15 @@ const registerDocEvents = (scene: Scene, events: Events) => {
                 keepColorTint: true
             };
 
-            // Create browser filesystem and zip filesystem
-            const browserFs = new BrowserFileSystem(options.filename, options.stream);
-            const browserWriter = await browserFs.createWriter(options.filename);
-            const zipFs = new ZipFileSystem(browserWriter);
-
-            // Write document.json
-            const docWriter = await zipFs.createWriter('document.json');
-            await docWriter.write(new TextEncoder().encode(JSON.stringify(document)));
-            await docWriter.close();
-
-            // Write each splat as PLY
+            const writer = options.stream ? new FileStreamWriter(options.stream) : new DownloadWriter(options.filename);
+            const zipWriter = new ZipWriter(writer);
+            await zipWriter.file('document.json', JSON.stringify(document));
             for (let i = 0; i < splats.length; ++i) {
-                await serializePly([splats[i]], serializeSettings, zipFs, `splat_${i}.ply`);
+                await zipWriter.start(`splat_${i}.ply`);
+                await serializePly([splats[i]], serializeSettings, zipWriter);
             }
-
-            // Close zip (also closes underlying browser writer)
-            await zipFs.close();
+            await zipWriter.close();
+            await writer.close();
         } catch (error) {
             await events.invoke('showPopup', {
                 type: 'error',
@@ -241,7 +231,7 @@ const registerDocEvents = (scene: Scene, events: Events) => {
         } else {
             try {
                 const fileHandles = await window.showOpenFilePicker({
-                    id: 'SuperSplatDocumentOpen',
+                    id: 'PointCosmDocumentOpen',
                     multiple: false,
                     types: SuperFileType
                 });
@@ -316,7 +306,7 @@ const registerDocEvents = (scene: Scene, events: Events) => {
         if (window.showSaveFilePicker) {
             try {
                 const handle = await window.showSaveFilePicker({
-                    id: 'SuperSplatDocumentSave',
+                    id: 'PointCosmDocumentSave',
                     types: SuperFileType,
                     suggestedName: 'scene.ssproj'
                 });

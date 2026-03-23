@@ -2,7 +2,6 @@ import { Container, Element, Label } from '@playcanvas/pcui';
 
 import { Events } from '../events';
 import { recentFiles } from '../recent-files';
-import { ShortcutManager } from '../shortcut-manager';
 import { localize } from './localization';
 import { MenuPanel, MenuItem } from './menu-panel';
 import arrowSvg from './svg/arrow.svg';
@@ -118,9 +117,6 @@ class Menu extends Container {
 
         menubar.append(buttonsContainer);
 
-        // Get the shortcut manager for displaying keyboard shortcuts
-        const shortcutManager: ShortcutManager = events.invoke('shortcutManager');
-
         const exportMenuPanel = new MenuPanel([{
             text: localize('menu.file.export.ply'),
             icon: createSvg(sceneExport),
@@ -131,11 +127,6 @@ class Menu extends Container {
             icon: createSvg(sceneExport),
             isEnabled: () => !events.invoke('scene.empty'),
             onSelect: () => events.invoke('scene.export', 'splat')
-        }, {
-            text: localize('menu.file.export.sog'),
-            icon: createSvg(sceneExport),
-            isEnabled: () => !events.invoke('scene.empty'),
-            onSelect: () => events.invoke('scene.export', 'sog')
         }, {
             // separator
         }, {
@@ -207,35 +198,35 @@ class Menu extends Container {
         const selectionMenuPanel = new MenuPanel([{
             text: localize('menu.select.all'),
             icon: createSvg(selectAll),
-            extra: shortcutManager.formatShortcut('select.all'),
+            extra: 'Ctrl + A',
             onSelect: () => events.fire('select.all')
         }, {
             text: localize('menu.select.none'),
             icon: createSvg(selectNone),
-            extra: shortcutManager.formatShortcut('select.none'),
+            extra: 'Shift + A',
             onSelect: () => events.fire('select.none')
         }, {
             text: localize('menu.select.invert'),
             icon: createSvg(selectInverse),
-            extra: shortcutManager.formatShortcut('select.invert'),
+            extra: 'Ctrl + I',
             onSelect: () => events.fire('select.invert')
         }, {
             // separator
         }, {
             text: localize('menu.select.lock'),
             icon: createSvg(selectLock),
-            extra: shortcutManager.formatShortcut('select.hide'),
+            extra: 'H',
             isEnabled: () => events.invoke('selection.splats'),
             onSelect: () => events.fire('select.hide')
         }, {
             text: localize('menu.select.unlock'),
             icon: createSvg(selectUnlock),
-            extra: shortcutManager.formatShortcut('select.unhide'),
+            extra: 'U',
             onSelect: () => events.fire('select.unhide')
         }, {
             text: localize('menu.select.delete'),
             icon: createSvg(selectDelete),
-            extra: shortcutManager.formatShortcut('select.delete'),
+            extra: 'Delete',
             isEnabled: () => events.invoke('selection.splats'),
             onSelect: () => events.fire('select.delete')
         }, {
@@ -265,63 +256,47 @@ class Menu extends Container {
             onSelect: async () => await events.invoke('show.videoSettingsDialog')
         }]);
 
-        const videoTutorialsMenuPanel = new MenuPanel([{
-            text: localize('menu.help.video-tutorials.basics'),
-            icon: 'E261',
-            onSelect: () => window.open('https://youtu.be/MwzaEM2I55I', '_blank')?.focus()
-        }, {
-            text: localize('menu.help.video-tutorials.in-depth'),
-            icon: 'E261',
-            onSelect: () => window.open('https://youtu.be/J37rTieKgJ8', '_blank')?.focus()
-        }, {
-            text: localize('menu.help.video-tutorials.deleting-floaters'),
-            icon: 'E261',
-            onSelect: () => window.open('https://youtu.be/8qaLfwkkSdU', '_blank')?.focus()
-        }, {
-            text: localize('menu.help.video-tutorials.scaling'),
-            icon: 'E261',
-            onSelect: () => window.open('https://youtu.be/fRK1vVMg_EU', '_blank')?.focus()
-        }]);
-
         const helpMenuPanel = new MenuPanel([{
-            text: localize('menu.help.video-tutorials'),
-            icon: 'E261',
-            subMenu: videoTutorialsMenuPanel
-        }, {
-            text: localize('menu.help.user-guide'),
-            icon: 'E232',
-            onSelect: () => window.open('https://developer.playcanvas.com/user-manual/gaussian-splatting/editing/supersplat/', '_blank')?.focus()
-        }, {
             text: localize('menu.help.shortcuts'),
             icon: 'E136',
             onSelect: () => events.fire('show.shortcuts')
-        }, {
-            // separator
-        }, {
-            text: localize('menu.help.discord'),
-            icon: 'E233',
-            onSelect: () => window.open('https://discord.gg/T3pnhRTTAY', '_blank')?.focus()
-        }, {
-            text: localize('menu.help.forum'),
-            icon: 'E432',
-            onSelect: () => window.open('https://forum.playcanvas.com', '_blank')?.focus()
-        }, {
-            // separator
-        }, {
-            text: localize('menu.help.github-repo'),
-            icon: 'E259',
-            onSelect: () => window.open('https://github.com/playcanvas/supersplat', '_blank')?.focus()
-        }, {
-            text: localize('menu.help.log-issue'),
-            icon: 'E336',
-            onSelect: () => window.open('https://github.com/playcanvas/supersplat/issues', '_blank')?.focus()
-        }, {
-            // separator
-        }, {
-            text: localize('menu.help.about'),
-            icon: 'E138',
-            onSelect: () => events.fire('show.about')
-        }]);
+        },
+        //  {
+        //     text: localize('menu.help.user-guide'),
+        //     icon: 'E232',
+        //     onSelect: () => window.open('https://developer.playcanvas.com/user-manual/gaussian-splatting/editing/supersplat/', '_blank').focus()
+        // }, {
+        //     text: localize('menu.help.log-issue'),
+        //     icon: 'E336',
+        //     onSelect: () => window.open('https://github.com/playcanvas/supersplat/issues', '_blank').focus()
+        // }, {
+        //     text: localize('menu.help.github-repo'),
+        //     icon: 'E259',
+        //     onSelect: () => window.open('https://github.com/playcanvas/supersplat', '_blank').focus()
+        // }, {
+        //     // separator
+        // }, {
+        //     text: localize('menu.help.basics-video'),
+        //     icon: 'E261',
+        //     onSelect: () => window.open('https://youtu.be/MwzaEM2I55I', '_blank').focus()
+        // }, {
+        //     // separator
+        // }, {
+        //     text: localize('menu.help.discord'),
+        //     icon: 'E233',
+        //     onSelect: () => window.open('https://discord.gg/T3pnhRTTAY', '_blank').focus()
+        // }, {
+        //     text: localize('menu.help.forum'),
+        //     icon: 'E432',
+        //     onSelect: () => window.open('https://forum.playcanvas.com', '_blank').focus()
+        // }, {
+        //     // separator
+        // }, {
+        //     text: localize('menu.help.about'),
+        //     icon: 'E138',
+        //     onSelect: () => events.invoke('show.about')
+        // }
+    ]);
 
         this.append(menubar);
         this.append(fileMenuPanel);
@@ -329,7 +304,6 @@ class Menu extends Container {
         this.append(exportMenuPanel);
         this.append(selectionMenuPanel);
         this.append(renderMenuPanel);
-        this.append(videoTutorialsMenuPanel);
         this.append(helpMenuPanel);
 
         const options: { dom: HTMLElement, menuPanel: MenuPanel }[] = [{

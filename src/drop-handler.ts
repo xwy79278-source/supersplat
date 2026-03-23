@@ -98,14 +98,23 @@ const CreateDropHandler = (target: HTMLElement, dropHandler: DropHandlerFunc) =>
         // handle single file drops so documents can propagate the filesystemfilehandle
         if (items.length === 1) {
             const item = items[0];
-            if (item.getAsFileSystemHandle && item.webkitGetAsEntry().isFile) {
-                const handle = await item.getAsFileSystemHandle();
-                if (handle?.kind === 'file') {
-                    const fileHandle = handle as FileSystemFileHandle;
-                    const file = await fileHandle.getFile();
-                    const droppedFile = new DroppedFile(file.name, file, fileHandle);
-                    dropHandler([droppedFile], ev.shiftKey);
-                    return;
+            // Check if getAsFileSystemHandle is available and we're in a secure context
+            if (item.getAsFileSystemHandle && window.isSecureContext) {
+                try {
+                    const entry = item.webkitGetAsEntry();
+                    if (entry?.isFile) {
+                        const handle = await item.getAsFileSystemHandle();
+                        if (handle?.kind === 'file') {
+                            const fileHandle = handle as FileSystemFileHandle;
+                            const file = await fileHandle.getFile();
+                            const droppedFile = new DroppedFile(file.name, file, fileHandle);
+                            dropHandler([droppedFile], ev.shiftKey);
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.warn('FileSystemHandle not available, falling back to standard file access:', error);
+                    // Fall through to standard file handling
                 }
             }
         }

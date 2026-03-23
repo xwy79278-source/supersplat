@@ -32,7 +32,7 @@ class LassoSelection {
 
         const paint = () => {
             polygon.setAttribute('points', [...points, currentPoint].reduce((prev, current) => `${prev}${current.x}, ${current.y} `, ''));
-            polygon.setAttribute('stroke', isClosed() ? '#fa6' : '#f60');
+            polygon.setAttribute('stroke', isClosed() ? '#fa6' : '#6241bf');
         };
 
         let dragId: number | undefined;
@@ -54,7 +54,7 @@ class LassoSelection {
             paint();
         };
 
-        const commitSelection = async (e: PointerEvent) => {
+        const commitSelection = (e: PointerEvent) => {
             // initialize canvas
             if (canvas.width !== parent.clientWidth || canvas.height !== parent.clientHeight) {
                 canvas.width = parent.clientWidth;
@@ -65,7 +65,7 @@ class LassoSelection {
             context.clearRect(0, 0, canvas.width, canvas.height);
 
             context.beginPath();
-            context.fillStyle = '#f60';
+            context.fillStyle = '#6241bf';
             context.beginPath();
             points.forEach((p, idx) => {
                 if (idx === 0) {
@@ -77,8 +77,7 @@ class LassoSelection {
             context.closePath();
             context.fill();
 
-            // wait for selection to complete
-            await events.invoke(
+            events.fire(
                 'select.byMask',
                 e.shiftKey ? 'add' : (e.ctrlKey ? 'remove' : 'set'),
                 canvas,
@@ -112,15 +111,14 @@ class LassoSelection {
             dragId = undefined;
         };
 
-        const pointerup = async (e: PointerEvent) => {
+        const pointerup = (e: PointerEvent) => {
             if (e.pointerId === dragId) {
                 e.preventDefault();
                 e.stopPropagation();
 
-                // wait for selection to complete before clearing polygon
-                await commitSelection(e);
-
                 dragEnd();
+
+                commitSelection(e);
 
                 points = [];
                 paint();
