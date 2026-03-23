@@ -1,54 +1,73 @@
-# SuperSplat - 3D Gaussian Splat Editor
 
-| [SuperSplat Editor](https://superspl.at/editor) | [User Guide](https://developer.playcanvas.com/user-manual/gaussian-splatting/editing/supersplat/) | [Forum](https://forum.playcanvas.com/) | [Discord](https://discord.gg/RSaMRzg) |
+# SuperSplat
 
-SuperSplat is a free and open source tool for inspecting, editing, optimizing and publishing 3D Gaussian Splats. It is built on web technologies and runs in the browser, so there's nothing to download or install.
+SuperSplat 是一个基于 PlayCanvas 引擎开发的 3D Gaussian Splatting 查看器和编辑器项目。
 
-A live version of this tool is available at: https://superspl.at/editor
+## 项目简介
 
-![image](https://github.com/user-attachments/assets/b6cbb5cc-d3cc-4385-8c71-ab2807fd4fba)
+本项目提供了一个强大的工具，用于查看、编辑和管理 3D Gaussian Splatting 数据。它利用 PlayCanvas 引擎的渲染能力，为用户提供流畅的 3D 可视化体验。
 
-To learn more about using SuperSplat, please refer to the [User Guide](https://developer.playcanvas.com/user-manual/gaussian-splatting/editing/supersplat/).
+## 功能特性
 
-## Local Development
+- **3D Gaussian Splatting 渲染**：高性能的 Gaussian Splatting 点云渲染
+- **交互式编辑**：直观的用户界面，支持对 Gaussian Splatting 数据进行编辑
+- **多格式支持**：支持多种 3D 数据格式的导入和导出
+- **实时预览**：实时查看编辑效果
+- **优化性能**：基于 WebGL 的高效渲染引擎
 
-To initialize a local development environment for SuperSplat, ensure you have [Node.js](https://nodejs.org/) 18 or later installed. Follow these steps:
+## 技术栈
 
-1. Clone the repository:
+- **PlayCanvas Engine**：核心 3D 渲染引擎
+- **TypeScript**：主要开发语言
+- **CSS**：界面样式
 
-   ```sh
-   git clone https://github.com/playcanvas/supersplat.git
-   cd supersplat
-   ```
+## 快速开始
 
-2. Install dependencies:
+### 环境要求
 
-   ```sh
-   git submodule update --init
-   npm install
-   ```
+- Node.js (推荐 v16 或更高版本)
+- npm 或 yarn 包管理器
 
-3. Build SuperSplat and start a local web server:
+### 安装依赖
 
-   ```sh
-   npm run develop
-   ```
+npm install
 
-4. Open a web browser tab and make sure network caching is disabled on the network tab and the other application caches are clear:
+### 开发模式
 
-   - On Safari you can use `Cmd+Option+e` or Develop->Empty Caches.
-   - On Chrome ensure the options "Update on reload" and "Bypass for network" are enabled in the Application->Service workers tab:
+npm run dev
 
-   <img width="846" alt="Screenshot 2025-04-25 at 16 53 37" src="https://github.com/user-attachments/assets/888bac6c-25c1-4813-b5b6-4beecf437ac9" />
+### 构建项目
 
-5. Navigate to `http://localhost:3000`
+npm run build
 
-When changes to the source are detected, SuperSplat is rebuilt automatically. Simply refresh your browser to see your changes.
+## 项目结构
 
-## Contributors
+supersplat/
+├── src/           # 源代码目录
+├── public/        # 静态资源
+├── dist/          # 构建输出目录
+└── README.md      # 项目文档
 
-SuperSplat is made possible by our amazing open source community:
+## 使用说明
 
-<a href="https://github.com/playcanvas/supersplat/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=playcanvas/supersplat" />
-</a>
+1. 启动应用后，可以通过界面导入 Gaussian Splatting 数据
+2. 使用鼠标进行场景导航和交互
+3. 通过工具栏访问各种编辑功能
+4. 完成编辑后可以导出处理后的数据
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request 来帮助改进项目。
+
+## 许可证
+
+请查看 LICENSE 文件了解详细信息。
+
+## 相关链接
+
+- [PlayCanvas 官网](https://playcanvas.com/)
+- [项目主页](https://github.com/playcanvas/supersplat)
+
+## 联系方式
+
+如有问题或建议，欢迎通过 GitHub Issues 联系我们。

@@ -1,5 +1,5 @@
 import { Container, Label } from '@playcanvas/pcui';
-import { Mat4, Vec3 } from 'playcanvas';
+import { Mat4, path, Vec3 } from 'playcanvas';
 
 import { DataPanel } from './data-panel';
 import { Events } from '../events';
@@ -10,8 +10,9 @@ import { ImageSettingsDialog } from './image-settings-dialog';
 import { localize, localizeInit } from './localization';
 import { Menu } from './menu';
 import { ModeToggle } from './mode-toggle';
-import logo from './playcanvas-logo.png';
+import logo from './company-logo.png';
 import { Popup, ShowOptions } from './popup';
+import { Progress } from './progress';
 import { PublishSettingsDialog } from './publish-settings-dialog';
 import { RightToolbar } from './right-toolbar';
 import { ScenePanel } from './scene-panel';
@@ -24,6 +25,13 @@ import { ViewCube } from './view-cube';
 import { ViewPanel } from './view-panel';
 import { version } from '../../package.json';
 
+// ts compiler and vscode find this type, but eslint does not
+type FilePickerAcceptType = unknown;
+
+const removeExtension = (filename: string) => {
+    return filename.substring(0, filename.length - path.getExtension(filename).length);
+};
+
 class EditorUI {
     appContainer: Container;
     topContainer: Container;
@@ -32,9 +40,7 @@ class EditorUI {
     canvas: HTMLCanvasElement;
     popup: Popup;
 
-    constructor(events: Events, remoteStorageMode: boolean) {
-        localizeInit();
-
+    constructor(events: Events) {
         // favicon
         const link = document.createElement('link');
         link.rel = 'icon';
@@ -68,7 +74,7 @@ class EditorUI {
         // app label
         const appLabel = new Label({
             id: 'app-label',
-            text: `SUPERSPLAT v${version}`
+            text: `POINTCOSM v${version}`
         });
 
         // cursor label
@@ -121,7 +127,7 @@ class EditorUI {
         const menu = new Menu(events);
 
         canvasContainer.dom.appendChild(canvas);
-        canvasContainer.append(appLabel);
+        // canvasContainer.append(appLabel);
         canvasContainer.append(cursorLabel);
         canvasContainer.append(toolsContainer);
         canvasContainer.append(scenePanel);
@@ -203,19 +209,26 @@ class EditorUI {
         });
 
         events.function('show.publishSettingsDialog', async () => {
-            // show popup if user isn't logged in
-            const canPublish = await events.invoke('publish.enabled');
-            if (!canPublish) {
-                await events.invoke('showPopup', {
-                    type: 'error',
-                    header: localize('popup.error'),
-                    message: localize('publish.please-log-in')
-                });
-                return false;
+            // 跳过登录验证，使用模拟用户数据
+            let userStatus = await events.invoke('publish.userStatus');
+            console.log('userStatus', userStatus);
+            
+            // 如果未登录，创建虚拟用户对象以绕过验证
+            if (!userStatus) {
+                console.warn('[Dev Mode] 跳过登录验证，使用模拟用户数据');
+                userStatus = {
+                    user: {
+                        id: 'dev-user-001',
+                        username: '开发测试用户',
+                        token: 'mock-token-for-development',
+                        apiServer: 'https://your-api-server.com'  // 替换为实际API地址
+                    },
+                    scenes: []  // 空场景列表，表示新建场景
+                };
             }
 
             // get user publish settings
-            const publishSettings = await publishSettingsDialog.show();
+            const publishSettings = await publishSettingsDialog.show(userStatus);
 
             // do publish
             if (publishSettings) {
@@ -235,7 +248,76 @@ class EditorUI {
             const videoSettings = await videoSettingsDialog.show();
 
             if (videoSettings) {
-                await events.invoke('render.video', videoSettings);
+
+                try {
+                    const docName = events.invoke('doc.name');
+
+                    // Determine file extension and mime type based on format
+                    let fileExtension: string;
+                    let filePickerTypes: FilePickerAcceptType[];
+
+                    // Codec name mapping for display
+                    const codecNames: Record<string, string> = {
+                        'h264': 'H.264',
+                        'h265': 'H.265',
+                        'vp9': 'VP9',
+                        'av1': 'AV1'
+                    };
+                    const codecName = codecNames[videoSettings.codec] || videoSettings.codec.toUpperCase();
+
+                    if (videoSettings.format === 'webm') {
+                        fileExtension = '.webm';
+                        filePickerTypes = [{
+                            description: `WebM Video (${codecName})`,
+                            accept: { 'video/webm': ['.webm'] }
+                        }];
+                    } else if (videoSettings.format === 'mov') {
+                        fileExtension = '.mov';
+                        filePickerTypes = [{
+                            description: `MOV Video (${codecName})`,
+                            accept: { 'video/quicktime': ['.mov'] }
+                        }];
+                    } else if (videoSettings.format === 'mkv') {
+                        fileExtension = '.mkv';
+                        filePickerTypes = [{
+                            description: `MKV Video (${codecName})`,
+                            accept: { 'video/x-matroska': ['.mkv'] }
+                        }];
+                    } else {
+                        fileExtension = '.mp4';
+                        filePickerTypes = [{
+                            description: `MP4 Video (${codecName})`,
+                            accept: { 'video/mp4': ['.mp4'] }
+                        }];
+                    }
+
+                    const suggested = `${removeExtension(docName ?? 'supersplat')}${fileExtension}`;
+
+                    let writable;
+
+                    if (window.showSaveFilePicker) {
+                        const fileHandle = await window.showSaveFilePicker({
+                            id: 'PointCosmVideoFileExport',
+                            types: filePickerTypes,
+                            suggestedName: suggested
+                        });
+
+                        writable = await fileHandle.createWritable();
+                    }
+
+                    await events.invoke('render.video', videoSettings, writable);
+                } catch (error) {
+                    if (error instanceof DOMException && error.name === 'AbortError') {
+                        // user cancelled save dialog
+                        return;
+                    }
+
+                    await events.invoke('showPopup', {
+                        type: 'error',
+                        header: 'Failed to render video',
+                        message: `'${error.message ?? error}'`
+                    });
+                }
             }
         });
 
@@ -243,7 +325,7 @@ class EditorUI {
             return this.popup.show({
                 type: 'info',
                 header: 'About',
-                message: `SUPERSPLAT v${version}`
+                message: `POINTCOSM v${version}`
             });
         });
 
@@ -263,6 +345,26 @@ class EditorUI {
 
         events.on('stopSpinner', () => {
             spinner.hidden = true;
+        });
+
+        // progress
+
+        const progress = new Progress();
+
+        topContainer.append(progress);
+
+        events.on('progressStart', (header: string) => {
+            progress.hidden = false;
+            progress.setHeader(header);
+        });
+
+        events.on('progressUpdate', (options: { text: string, progress: number }) => {
+            progress.setText(options.text);
+            progress.setProgress(options.progress);
+        });
+
+        events.on('progressEnd', () => {
+            progress.hidden = true;
         });
 
         // initialize canvas to correct size before creating graphics device etc

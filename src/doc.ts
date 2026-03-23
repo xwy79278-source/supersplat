@@ -1,16 +1,18 @@
 import { Events } from './events';
+import { recentFiles } from './recent-files';
 import { Scene } from './scene';
 import { DownloadWriter, FileStreamWriter } from './serialize/writer';
 import { ZipWriter } from './serialize/zip-writer';
 import { Splat } from './splat';
 import { serializePly } from './splat-serialize';
+import { Transform } from './transform';
 import { localize } from './ui/localization';
 
 // ts compiler and vscode find this type, but eslint does not
 type FilePickerAcceptType = unknown;
 
 const SuperFileType: FilePickerAcceptType[] = [{
-    description: 'SuperSplat document',
+    description: 'PointCosm document',
     accept: {
         'application/x-supersplat': ['.ssproj']
     }
@@ -101,7 +103,7 @@ const registerDocEvents = (scene: Scene, events: Events) => {
                 // construct the splat asset
                 const contents = await zip.file(`splat_${i}.ply`).async('blob');
                 const url = URL.createObjectURL(contents);
-                const splat = await scene.assetLoader.loadModel({
+                const splat = await scene.assetLoader.load({
                     url,
                     filename
                 });
@@ -122,6 +124,16 @@ const registerDocEvents = (scene: Scene, events: Events) => {
             events.invoke('docDeserialize.poseSets', document.poseSets);
             events.invoke('docDeserialize.view', document.view);
             scene.camera.docDeserialize(document.camera);
+
+            // refresh the pivot to reflect the loaded transform
+            const currentSelection = events.invoke('selection');
+            if (currentSelection) {
+                const pivot = events.invoke('pivot');
+                const transform = new Transform();
+                const pivotOrigin = events.invoke('pivot.origin');
+                currentSelection.getPivot(pivotOrigin, false, transform);
+                pivot.place(transform);
+            }
         } catch (error) {
             await events.invoke('showPopup', {
                 type: 'error',
@@ -190,7 +202,7 @@ const registerDocEvents = (scene: Scene, events: Events) => {
     // NOTE: on chrome it's possible to get the FileSystemFileHandle from the DataTransferItem
     // (which would result in more seamless user experience), but this is not yet supported in
     // other browsers.
-    events.function('doc.load', async (file: File) => {
+    events.function('doc.load', async (file: File, handle?: FileSystemFileHandle) => {
         if (!events.invoke('scene.empty') && !await getResetConfirmation()) {
             return false;
         }
@@ -198,6 +210,11 @@ const registerDocEvents = (scene: Scene, events: Events) => {
         await loadDocument(file);
 
         events.fire('doc.setName', file.name);
+
+        if (handle) {
+            documentFileHandle = handle;
+            recentFiles.add(handle);
+        }
     });
 
     events.function('doc.open', async () => {
@@ -214,7 +231,7 @@ const registerDocEvents = (scene: Scene, events: Events) => {
         } else {
             try {
                 const fileHandles = await window.showOpenFilePicker({
-                    id: 'SuperSplatDocumentOpen',
+                    id: 'PointCosmDocumentOpen',
                     multiple: false,
                     types: SuperFileType
                 });
@@ -228,11 +245,42 @@ const registerDocEvents = (scene: Scene, events: Events) => {
                     // store file handle for subsequent saves
                     documentFileHandle = fileHandle;
                     events.fire('doc.setName', fileHandle.name);
+                    recentFiles.add(fileHandle);
                 }
             } catch (error) {
                 if (error.name !== 'AbortError') {
                     console.error(error);
                 }
+            }
+        }
+    });
+
+    events.function('doc.openRecent', async (fileHandle: FileSystemFileHandle) => {
+        if (!events.invoke('scene.empty') && !await getResetConfirmation()) {
+            return false;
+        }
+
+        try {
+            if (await fileHandle.queryPermission({ mode: 'read' }) !== 'granted') {
+                if (await fileHandle.requestPermission({ mode: 'read' }) !== 'granted') {
+                    return false;
+                }
+            }
+
+            await loadDocument(await fileHandle.getFile());
+
+            // store file handle for subsequent saves
+            documentFileHandle = fileHandle;
+            events.fire('doc.setName', fileHandle.name);
+            recentFiles.add(fileHandle);
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.error(error);
+                await events.invoke('showPopup', {
+                    type: 'error',
+                    header: localize('popup.error-loading'),
+                    message: `${error.message ?? error}`
+                });
             }
         }
     });
@@ -258,7 +306,7 @@ const registerDocEvents = (scene: Scene, events: Events) => {
         if (window.showSaveFilePicker) {
             try {
                 const handle = await window.showSaveFilePicker({
-                    id: 'SuperSplatDocumentSave',
+                    id: 'PointCosmDocumentSave',
                     types: SuperFileType,
                     suggestedName: 'scene.ssproj'
                 });
@@ -266,6 +314,7 @@ const registerDocEvents = (scene: Scene, events: Events) => {
                 documentFileHandle = handle;
                 events.fire('doc.setName', handle.name);
                 events.fire('doc.saved');
+                recentFiles.add(handle);
             } catch (error) {
                 if (error.name !== 'AbortError') {
                     console.error(error);

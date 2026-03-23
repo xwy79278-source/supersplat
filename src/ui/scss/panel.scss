@@ -26,6 +26,7 @@
             color: $text-primary;
             font-weight: bold;
             flex-grow: 1;
+            text-transform: uppercase;
         }
     }
 
@@ -48,7 +49,7 @@
         }
     
         &:hover {
-            color: #ff9900;
+            color: #9900ff;
             background-color: $bcg-darkest;
             cursor: pointer;
         }

@@ -49,7 +49,7 @@ class Splat extends Element {
     splatData: GSplatData;
     numSplats = 0;
     numDeleted = 0;
-    numHidden = 0;
+    numLocked = 0;
     numSelected = 0;
     entity: Entity;
     changedCounter = 0;
@@ -75,9 +75,12 @@ class Splat extends Element {
     _whitePoint = 1;
     _transparency = 1;
 
+    measurePoints: Vec3[] = [];
+    measureSelection = -1;
+
     rebuildMaterial: (bands: number) => void;
 
-    constructor(asset: Asset) {
+    constructor(asset: Asset, orientation: Vec3) {
         super(ElementType.splat);
 
         const splatResource = asset.resource as GSplatResource;
@@ -90,7 +93,7 @@ class Splat extends Element {
         this.numSplats = splatData.numSplats;
 
         this.entity = new Entity('splatEntitiy');
-        this.entity.setEulerAngles(0, 0, 180);
+        this.entity.setEulerAngles(orientation);
         this.entity.addComponent('gsplat', { asset });
 
         const instance = this.entity.gsplat.instance;
@@ -116,7 +119,7 @@ class Splat extends Element {
         // added per-splat state channel
         // bit 1: selected
         // bit 2: deleted
-        // bit 3: hidden
+        // bit 3: locked
         if (!this.splatData.getProp('state')) {
             this.splatData.getElement('vertex').properties.push({
                 type: 'uchar',
@@ -205,22 +208,22 @@ class Splat extends Element {
         this.stateTexture.unlock();
 
         let numSelected = 0;
-        let numHidden = 0;
+        let numLocked = 0;
         let numDeleted = 0;
 
         for (let i = 0; i < state.length; ++i) {
             const s = state[i];
             if (s & State.deleted) {
                 numDeleted++;
-            } else if (s & State.hidden) {
-                numHidden++;
+            } else if (s & State.locked) {
+                numLocked++;
             } else if (s & State.selected) {
                 numSelected++;
             }
         }
 
         this.numSplats = state.length - numDeleted;
-        this.numHidden = numHidden;
+        this.numLocked = numLocked;
         this.numSelected = numSelected;
         this.numDeleted = numDeleted;
 
@@ -398,13 +401,6 @@ class Splat extends Element {
         }
 
         this.entity.enabled = this.visible;
-
-        // Temp hack: override the splat viewport size because we're rendering to an offscreen
-        // render target and the engine currently always takes the backbuffer size.
-        // this workaround can be removed once https://github.com/playcanvas/engine/pull/7425 is
-        // available
-        const rt = this.scene.camera.entity.camera.renderTarget;
-        this.entity.gsplat.instance.meshInstance.setParameter('viewport', [rt.width, rt.height]);
     }
 
     focalPoint() {

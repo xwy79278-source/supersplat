@@ -17,8 +17,10 @@
 @use 'mode-toggle.scss';
 @use 'settings-dialog.scss';
 @use 'spinner.scss';
+@use 'progress.scss';
 @use 'export-popup.scss';
 @use 'timeline-panel.scss';
+@use 'tool.scss';
 
 * {
     font-size: 12px;
@@ -35,7 +37,7 @@ body {
     padding: 0;
     height: 100%;
     max-height: 100%;
-    background-color: $bcg-primary;
+    background-color: black;
     overflow: hidden;
     touch-action: none;
 }
@@ -75,7 +77,7 @@ body {
 
 #coord-space-toggle.active {
     background-color: $bcg-dark !important;
-    color: #f60;
+    color: #6241bf;
 }
 
 #file-selector {
@@ -107,6 +109,7 @@ body {
 
 .shortcut-header {
     background-color: $bcg-darker;
+    text-transform: uppercase;
 }
 
 #app-label {
@@ -134,13 +137,6 @@ body {
         border: 1px solid $clr-hilight;
         background-color: rgba(0, 0, 0, 0.25);
     }
-}
-
-.select-svg {
-    display: none;
-    position: absolute;
-    width: 100%;
-    height: 100%;
 }
 
 #view-cube-container {
@@ -173,6 +169,9 @@ body {
     width: 100%;
     height: 100%;
     cursor: crosshair;
+    &.noevents {
+        pointer-events: none;
+    }
 }
 
 #canvas {
@@ -224,7 +223,7 @@ body {
     background: #5b7073;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: #f60;
+    background: #6241bf;
 }
 ::-webkit-scrollbar-corner {
     background: #2c393c;
